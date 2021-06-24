@@ -180,23 +180,6 @@ HWND OpenGLWindowCreate(
     }
 
     return hWnd;
-
-fail_create_rc:
-fail_set_pf:
-fail_choose_pf:
-    ReleaseDC(hWnd, hDC);
-fail_get_dc:
-    DestroyWindow(hWnd);
-fail_create_wnd:
-
-    return NULL;
-}
-
-void OnOpenGLWindowDestroy()
-{
-    wglMakeCurrent(NULL,NULL);
-    wglDeleteContext(hRC);
-    PostQuitMessage(0);
 }
 
 BOOL cursor_needs_setting = TRUE;
@@ -237,11 +220,65 @@ LRESULT CALLBACK ViewProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
         break;
 
     case WM_DESTROY:
-        OnOpenGLWindowDestroy();
+        wglMakeCurrent(NULL,NULL);
+        wglDeleteContext(hRC);
+        PostQuitMessage(0);
         break;
 
     case WM_PAINT:
-        display(hWnd);
+        HDC hDC = GetDC(hWnd);
+        RECT rect;
+        GetClientRect(hWnd, &rect);
+
+        wglMakeCurrent(hDC, hRC);
+
+        float const ratio = (float)rect.right/(float)rect.bottom;
+        glViewport(
+            0,
+            0,
+            rect.right,
+            rect.bottom);
+
+        glClearColor(
+            bg_color[0],
+            bg_color[1],
+            bg_color[2],
+            0.);
+        glClearDepth(1.);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        glMatrixMode(GL_PROJECTION);
+        glLoadIdentity();
+        glOrtho(-ratio, ratio, -1., 1., -1, 1);
+
+        glMatrixMode(GL_MODELVIEW);
+        glLoadIdentity();
+
+        float const cos60 = cosf(M_PI*60./180.);
+        float const sin60 = sinf(M_PI*60./180.);
+
+        GLfloat const triangle[] = {
+            -1., -sin60, 1., 0., 0.,
+             1., -sin60, 0., 1., 0.,
+             0.,  sin60, 0., 0., 1.
+        };
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        glEnableClientState(GL_VERTEX_ARRAY);
+        glEnableClientState(GL_COLOR_ARRAY);
+
+        glVertexPointer(2, GL_FLOAT, sizeof(GLfloat)*5, &triangle[0]);
+        glColorPointer( 3, GL_FLOAT, sizeof(GLfloat)*5, &triangle[0]);
+
+        glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        SwapBuffers(hDC);
+        glFinish();
+
+        wglMakeCurrent(NULL, NULL);
+        ReleaseDC(hWnd, hDC);
         break;
 
     default:
@@ -250,64 +287,8 @@ LRESULT CALLBACK ViewProc(HWND hWnd,UINT uMsg,WPARAM wParam,LPARAM lParam)
     return DefWindowProc(hWnd,uMsg,wParam,lParam);
 }
 
-void display(HWND hWnd) {
-    HDC hDC = GetDC(hWnd);
-    RECT rect;
-    GetClientRect(hWnd, &rect);
+int main(int argc, char *argv[]) {
 
-    wglMakeCurrent(hDC, hRC);
-
-    float const ratio = (float)rect.right/(float)rect.bottom;
-    glViewport(
-        0,
-        0,
-        rect.right,
-        rect.bottom);
-
-    glClearColor(
-        bg_color[0],
-        bg_color[1],
-        bg_color[2],
-        0.);
-    glClearDepth(1.);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(-ratio, ratio, -1., 1., -1, 1);
-
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-    float const cos60 = cosf(M_PI*60./180.);
-    float const sin60 = sinf(M_PI*60./180.);
-
-    GLfloat const triangle[] = {
-        -1., -sin60, 1., 0., 0.,
-         1., -sin60, 0., 1., 0.,
-         0.,  sin60, 0., 0., 1.
-    };
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_COLOR_ARRAY);
-
-    glVertexPointer(2, GL_FLOAT, sizeof(GLfloat)*5, &triangle[0]);
-    glColorPointer( 3, GL_FLOAT, sizeof(GLfloat)*5, &triangle[0]);
-
-    glDrawArrays(GL_TRIANGLES, 0, 3);
-
-    SwapBuffers(hDC);
-    glFinish();
-
-    wglMakeCurrent(NULL, NULL);
-    ReleaseDC(hWnd, hDC);
-}
-
-int main(int argc, char *argv[])
-{
     HINSTANCE hInstance = GetModuleHandle(NULL);
     MSG msg;
     BOOL bRet;
