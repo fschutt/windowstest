@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 #![windows_subsystem = "windows"]
 
 pub mod bindings {
@@ -5,64 +6,43 @@ pub mod bindings {
 }
 
 use std::{ptr, mem};
-use std::ffi::OsStr;
+use std::ffi::{OsStr, c_void};
 use std::os::windows::ffi::OsStrExt;
+use std::sync::{Arc, Mutex};
+use std::rc::Rc;
+
+use gleam::gl::GlFns;
+use gleam::gl::Gl;
 use bindings::{
     Windows::Win32::{
-        System::LibraryLoader::{LoadLibraryW, GetModuleHandleW, GetProcAddress},
+        System::LibraryLoader::{LoadLibraryW, FreeLibrary, GetModuleHandleW, GetProcAddress},
         UI::WindowsAndMessaging::{
             RegisterClassW, ShowWindow, CreateWindowExW, DefWindowProcW,
             GetMessageW, TranslateMessage, DispatchMessageW, GetClientRect,
-            DestroyWindow,
+            DestroyWindow, PostQuitMessage, GetWindowLongPtrW, SetWindowLongPtrW,
             WNDCLASSW, CS_HREDRAW, CS_VREDRAW, CS_OWNDC,
             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, SW_SHOW, SW_MAXIMIZE,
-            HMENU, MSG, WS_EX_APPWINDOW,
+            HMENU, MSG, WS_EX_APPWINDOW, CREATESTRUCTW, GWLP_USERDATA,
+            WM_NCCREATE, WM_CREATE, WM_NCMOUSELEAVE, WM_MOUSEMOVE, WM_PAINT, WM_DESTROY
         },
         UI::Controls::MARGINS,
         Foundation::{HWND, PWSTR, LPARAM, WPARAM, LRESULT, BOOL, RECT},
         System::SystemInformation::{GetVersionExW, OSVERSIONINFOW},
         Graphics::OpenGL::{
             HGLRC, PIXELFORMATDESCRIPTOR,
-            wglMakeCurrent, wglDeleteContext, wglCreateContext,
+            wglMakeCurrent, wglDeleteContext, wglCreateContext, wglGetProcAddress,
             ChoosePixelFormat, SetPixelFormat, SwapBuffers, DescribePixelFormat,
         },
-        Graphics::Gdi::{GetDC, ReleaseDC, UpdateWindow},
+        Graphics::Gdi::{GetDC, HDC, HRGN, ReleaseDC, UpdateWindow, PFD_DRAW_TO_WINDOW, PFD_SUPPORT_OPENGL, PFD_DOUBLEBUFFER, PFD_TYPE_RGBA, PFD_MAIN_PLANE },
         Graphics::Dwm::{DWM_BLURBEHIND, DWM_BB_ENABLE},
     },
 };
 use windows::HRESULT;
 
+// windef.h
+const TRUE: i32 = 1;
+
 const CLASS_NAME: &str = "Window Class";
-
-// Optional function pointer for "DwmEnableBlurBehindWindow" function
-static mut DwmEnableBlurBehindWindow: Option<unsafe extern "C" fn(HWND, &DWM_BLURBEHIND) -> HRESULT> = None;
-// Optional function pointer for "DwmExtendFrameIntoClientArea" function
-static mut DwmExtendFrameIntoClientArea: Option<unsafe extern "C" fn(HWND, &MARGINS) -> HRESULT> = None;
-// Optional function pointer for getting the opaque system color of the window
-static mut DwmGetColorizationColor: Option<unsafe extern "C" fn(&mut u32, &mut BOOL) -> HRESULT> = None;
-
-unsafe fn initialize_function_pointers() -> windows::Result<()> {
-
-    if DwmEnableBlurBehindWindow.is_some() ||
-       DwmExtendFrameIntoClientArea.is_some() ||
-       DwmExtendFrameIntoClientArea.is_some() {
-        return Ok(());
-    }
-
-    let mut os_vinfo = OSVERSIONINFOW::default();
-    GetVersionExW(&mut os_vinfo);
-
-    if os_vinfo.dwMajorVersion >= 6 {
-        let hDwmAPI_DLL = LoadLibraryW("dwmapi.dll");
-        if !hDwmAPI_DLL.is_null() {
-            DwmEnableBlurBehindWindow = Some(mem::transmute(GetProcAddress(hDwmAPI_DLL, "DwmEnableBlurBehindWindow")));
-            DwmExtendFrameIntoClientArea = Some(mem::transmute(GetProcAddress(hDwmAPI_DLL, "DwmExtendFrameIntoClientArea")));
-            DwmGetColorizationColor = Some(mem::transmute(GetProcAddress(hDwmAPI_DLL, "DwmGetColorizationColor")));
-        }
-    }
-
-    Ok(())
-}
 
 enum WindowsWindowCreateError {
     FailedToCreateHInstance(HRESULT),
@@ -84,11 +64,15 @@ enum WindowsStartupError {
 
 struct WindowsWindowData {
     // OpenGL 3.1 context pointer
-    hRC: HGLRC,
+    gl_context: Arc<Mutex<Option<WindowsGlContext>>>,
 }
 
-fn create_opengl_window() -> windows::Result<HWND> {
+struct WindowsGlContext {
+    hrc: HGLRC,
+    gl: Rc<dyn Gl>,
+}
 
+fn create_window() -> windows::Result<(HWND, Arc<Mutex<Option<WindowsGlContext>>>)> {
     let app_instance = unsafe { GetModuleHandleW(PWSTR::NULL) };
     if app_instance.is_null() {
         return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to create HINSTANCE (GetModuleHandleW failed)"));
@@ -112,6 +96,11 @@ fn create_opengl_window() -> windows::Result<HWND> {
     // error can be ignored
     unsafe { RegisterClassW(&wc) };
 
+    let context_arc = Arc::new(Mutex::new(None));
+    let window_data = Box::new(WindowsWindowData {
+        gl_context: context_arc.clone()
+    });
+
     // Create the window.
     let hwnd = unsafe { CreateWindowExW(
         WS_EX_APPWINDOW,                // Optional window styles
@@ -128,50 +117,163 @@ fn create_opengl_window() -> windows::Result<HWND> {
         HWND::NULL,         // Parent window
         HMENU::NULL,        // Menu
         app_instance,       // Instance handle
-        ptr::null_mut(),    // Additional application data
+        Box::leak(window_data) as *mut WindowsWindowData as *mut c_void,    // Additional application data
     ) };
 
     if hwnd.is_null() {
-        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to create HWND (CreateWindowExW failed)"));
+        Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to create HWND (CreateWindowExW failed)"))
+    } else {
+        Ok((hwnd, context_arc))
     }
+}
+
+// function can fail: creates an OpenGL context on the HWND, stores the context on the window-associated data
+fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlContext>>>) -> windows::Result<()> {
 
     // -- window created, now create OpenGL context
 
     // Get DC
     let hDC = unsafe { GetDC(hwnd) };
     if hDC.is_null()  {
-        unsafe { DestroyWindow(hwnd) };
+        // unsafe { DestroyWindow(hwnd) };
         return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to get drawing context (GetDC(hwnd) failed)"));
     }
 
-    /*
-        PIXELFORMATDESCRIPTOR pfd = {
-            sizeof(PIXELFORMATDESCRIPTOR),  //  size of this pfd
-            1,                     // version number
+    let transparent_opengl_pixelformat_index = match get_transparent_pixel_format_index(hDC) {
+        Some(i) => i,
+        None => {
+            unsafe {
+                ReleaseDC(hwnd, hDC);
+                // DestroyWindow(hwnd);
+            }
+            return Err(windows::Error::new(windows::HRESULT::from_thread(), "Transparent OpenGL context not supported"));
+        }
+    };
+
+    // now this is a kludge; we need to pass something in the PIXELFORMATDESCRIPTOR
+    // to SetPixelFormat; it will be ignored, mostly. OTOH we want to send something
+    // sane, we're nice people after all - it doesn't hurt if this fails.
+    let mut pfd = PIXELFORMATDESCRIPTOR {
+        nSize: mem::size_of::<PIXELFORMATDESCRIPTOR> as u16,
+        nVersion: 1,
+        dwFlags: {
             PFD_DRAW_TO_WINDOW |   // support window
             PFD_SUPPORT_OPENGL |   // support OpenGL
-            PFD_DOUBLEBUFFER,      // double buffered
-            PFD_TYPE_RGBA,         // RGBA type
-            24,                    // 24-bit color depth
-            0, 0, 0, 0, 0, 0,      // color bits ignored
-            0,                     // no alpha buffer
-            0,                     // shift bit ignored
-            0,                     // no accumulation buffer
-            0, 0, 0, 0,            // accum bits ignored
-            32,                    // 32-bit z-buffer
-            0,                     // no stencil buffer
-            0,                     // no auxiliary buffer
-            PFD_MAIN_PLANE,        // main layer
-            0,                     // reserved
-            0, 0, 0                // layer masks ignored
-            };
-            HDC  hdc;
-            int  iPixelFormat;
+            PFD_DOUBLEBUFFER       // double buffered
+        },
+        iPixelType: PFD_TYPE_RGBA as u8,
+        cColorBits: 24,
+        cRedBits: 0,
+        cRedShift: 0,
+        cGreenBits: 0,
+        cGreenShift: 0,
+        cBlueBits: 0,
+        cBlueShift: 0,
+        cAlphaBits: 0,
+        cAlphaShift: 0,
+        cAccumBits: 0,
+        cAccumRedBits: 0,
+        cAccumGreenBits: 0,
+        cAccumBlueBits: 0,
+        cAccumAlphaBits: 0,
+        cDepthBits: 32, // 32-bit z-buffer
+        cStencilBits: 0, // no stencil buffer
+        cAuxBuffers: 0, // no auxiliary buffer
+        iLayerType: PFD_MAIN_PLANE as u8, // main layer
+        bReserved: 0,
+        dwLayerMask: 0,
+        dwVisibleMask: 0,
+        dwDamageMask: 0,
+    };
 
-        iPixelFormat = ChoosePixelFormat(hdc, &pfd);
-    */
+    unsafe {
+        DescribePixelFormat(hDC, transparent_opengl_pixelformat_index, mem::size_of::<PIXELFORMATDESCRIPTOR>() as u32, &mut pfd);
+        if !SetPixelFormat(hDC, transparent_opengl_pixelformat_index, &pfd).as_bool() {
+            ReleaseDC(hwnd, hDC);
+            // DestroyWindow(hwnd);
+            return Err(windows::Error::new(windows::HRESULT::from_thread(), "OS has no matching pixel format (num_pixel_formats = 0)"));
+        }
+    }
 
-    /*
+    // https://www.khronos.org/registry/OpenGL/extensions/ARB/WGL_ARB_create_context.txt
+    const WGL_CONTEXT_MAJOR_VERSION_ARB: i32 = 0x2091;
+    const WGL_CONTEXT_MINOR_VERSION_ARB: i32 = 0x2092;
+
+    // Create OpenGL 3.1 context
+    let context_attribs = [
+        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+        WGL_CONTEXT_MINOR_VERSION_ARB, 1,
+        0, 0
+    ];
+
+    let wglarb_CreateContextAttribsARB = unsafe { wglGetProcAddress("wglCreateContextAttribsARB") };
+    let wglarb_CreateContextAttribsARB: unsafe extern "system" fn(HDC, HGLRC, *const [i32]) -> HGLRC  = match wglarb_CreateContextAttribsARB {
+        None => {
+            unsafe {
+                ReleaseDC(hwnd, hDC);
+                // DestroyWindow(hwnd);
+            }
+            return Err(windows::Error::new(windows::HRESULT::from_thread(), "Could not create OpenGL 3.1 context (wglarb_CreateContextAttribsARB not found)"));
+        },
+        Some(s) => unsafe { mem::transmute(s) },
+    };
+
+    let hRC = unsafe { wglarb_CreateContextAttribsARB(hDC, HGLRC::NULL, &context_attribs[..]) };
+    if hRC.is_null() {
+        unsafe {
+            ReleaseDC(hwnd, hDC);
+            // DestroyWindow(hwnd);
+        }
+        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Could not create OpenGL 3.1 context (wglarb_CreateContextAttribsARB failed)"));
+    }
+
+    // store hRC in the windows application data
+    if let Ok(mut lock) = context_arc.lock() {
+        let lock = &mut *lock;
+        if let Some(context) = lock.as_mut() {
+            unsafe { wglDeleteContext(context.hrc); }
+        }
+        let loaded_function_pointers = unsafe { GlFns::load_with(|func_name| match wglGetProcAddress(func_name) {
+            Some(s) => mem::transmute(s),
+            None => ptr::null(),
+        }) };
+
+        *lock = Some(WindowsGlContext {
+            hrc: hRC,
+            gl: loaded_function_pointers,
+        });
+    } else {
+        unsafe {
+            ReleaseDC(hwnd, hDC);
+            // DestroyWindow(hwnd);
+        }
+        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Could not store context on Window data"));
+    }
+
+    unsafe {
+        ReleaseDC(hwnd, hDC);
+    }
+
+    return Ok(());
+}
+
+fn get_transparent_pixel_format_index(hDC: HDC) -> Option<i32> {
+
+    // https://www.khronos.org/registry/OpenGL/api/GL/wglext.h
+    const WGL_DRAW_TO_WINDOW_ARB: i32 = 0x2001;
+    const WGL_DOUBLE_BUFFER_ARB: i32 = 0x2011;
+    const WGL_SUPPORT_OPENGL_ARB: i32 = 0x2010;
+    const WGL_PIXEL_TYPE_ARB: i32 = 0x2013;
+    const WGL_TYPE_RGBA_ARB: i32 = 0x202B;
+    const WGL_TRANSPARENT_ARB: i32 = 0x200A;
+    const WGL_COLOR_BITS_ARB: i32 = 0x2014;
+    const WGL_RED_BITS_ARB: i32 = 0x2015;
+    const WGL_GREEN_BITS_ARB: i32 = 0x2017;
+    const WGL_BLUE_BITS_ARB: i32 = 0x2019;
+    const WGL_ALPHA_BITS_ARB: i32 = 0x201B;
+    const WGL_DEPTH_BITS_ARB: i32 = 0x2022;
+    const WGL_STENCIL_BITS_ARB: i32 = 0x2023;
+
     let attribs = [
         WGL_DRAW_TO_WINDOW_ARB, TRUE,
         WGL_DOUBLE_BUFFER_ARB, TRUE,
@@ -187,75 +289,58 @@ fn create_opengl_window() -> windows::Result<HWND> {
         WGL_STENCIL_BITS_ARB, 8,
         0, 0
     ];
-    */
 
     let mut pixel_format = 0;
     let mut num_pixel_formats = 0;
 
-    if unsafe { !ChoosePixelFormat(hDC, attribs, NULL, 1, &mut pixel_format, &mut num_pixel_formats).as_bool() } {
-        unsafe {
-            ReleaseDC(hwnd, hDC);
-            DestroyWindow(hwnd);
-        }
-        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to get pixel format (ChoosePixelFormat failed)"));
+    let wglarb_ChoosePixelFormatARB = unsafe { wglGetProcAddress("wglChoosePixelFormatARB") }?;
+    let wglarb_ChoosePixelFormatARB: unsafe extern "system" fn(HDC, *const [i32], *const f32, u32, &mut i32, &mut u32) -> BOOL = unsafe { mem::transmute(wglarb_ChoosePixelFormatARB) };
+    let choose_pixel_format_result = unsafe { wglarb_ChoosePixelFormatARB(
+        hDC, &attribs[..], ptr::null(), 1, &mut pixel_format, &mut num_pixel_formats
+    ) };
+    if !choose_pixel_format_result.as_bool() {
+        return None; // wglarb_ChoosePixelFormatARB failed
     }
 
-    if num_pixel_formats == 0 {
-        unsafe {
-            ReleaseDC(hwnd, hDC);
-            DestroyWindow(hwnd);
-        }
-        return Err(windows::Error::new(windows::HRESULT::from_thread(), "OS has no matching pixel format (num_pixel_formats = 0)"));
+    // pixel format is now the index of the PIXELFORMATDESCRIPTOR
+    // that can handle a transparent OpenGL context
+    if num_pixel_formats == 0 { None } else { Some(pixel_format) }
+}
+
+unsafe fn set_window_transparency_and_region(hwnd: HWND, transparent: bool, no_decorations: bool) -> windows::Result<()> {
+
+    if !transparent && !no_decorations {
+        return Ok(()); // nothing to do
     }
 
-    // now this is a kludge; we need to pass something in the PIXELFORMATDESCRIPTOR
-    // to SetPixelFormat; it will be ignored, mostly. OTOH we want to send something
-    // sane, we're nice people after all - it doesn't hurt if this fails.
-    let mut pfd = PIXELFORMATDESCRIPTOR::NULL;
-    unsafe {
-        DescribePixelFormat(hDC, pixel_format, &mut pfd);
-        if !SetPixelFormat(hDC, pixel_format, &pfd).as_bool() {
-            ReleaseDC(hwnd, hDC);
-            DestroyWindow(hwnd);
-            return Err(windows::Error::new(windows::HRESULT::from_thread(), "OS has no matching pixel format (num_pixel_formats = 0)"));
-        }
+    let mut os_vinfo = OSVERSIONINFOW::default();
+    GetVersionExW(&mut os_vinfo);
+    if os_vinfo.dwMajorVersion < 6 {
+        return Ok(()); // compositing not supported
     }
 
-    // Créate OpenGL 3.1 context
-    let context_attribs = [
-        WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
-        WGL_CONTEXT_MINOR_VERSION_ARB, 1,
-        0, 0
-    ];
-
-    let hRC = unsafe { wglCreateContext(hDC, NULL, context_attribs) };
-    if hRC.is_null() {
-        unsafe {
-            ReleaseDC(hwnd, hDC);
-            DestroyWindow(hwnd);
-        }
-        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Could not create OpenGL 3.1 context (wglCreateContext failed)"));
+    let hDwmAPI_DLL = LoadLibraryW("dwmapi.dll");
+    if hDwmAPI_DLL.is_null() {
+        return Ok(()); // dwnapi.dll not found
     }
 
-    unsafe {
-        ReleaseDC(hwnd, hDC);
-        // SetWindowLongPtr(Box::new(WindowsWindowData { hRC }));
-        initialize_function_pointers();
-
-        // optional: create transparency, extend window frame
-        if let Some(impl_DwmEnableBlurBehindWindow) = DwmEnableBlurBehindWindow {
-            // no error checking here...
-            impl_DwmEnableBlurBehindWindow(hwnd, &DWM_BLURBEHIND {
+    if transparent {
+        if let Some(DwmEnableBlurBehindWindow) = GetProcAddress(hDwmAPI_DLL, "DwmEnableBlurBehindWindow") {
+            let DwmEnableBlurBehindWindow: unsafe extern "system" fn(HWND, &DWM_BLURBEHIND) -> HRESULT = mem::transmute(DwmEnableBlurBehindWindow);
+            DwmEnableBlurBehindWindow(hwnd, &DWM_BLURBEHIND {
                 dwFlags: DWM_BB_ENABLE,
-                fEnable: BOOL::TRUE,
-                hRgnBlur: NULL,
-                fTransitionOnMaximized: BOOL::TRUE,
+                fEnable: BOOL(TRUE),
+                hRgnBlur: HRGN::NULL,
+                fTransitionOnMaximized: BOOL(TRUE),
             });
         }
+    }
 
-        if let Some(impl_DwmExtendFrameIntoClientArea) = DwmExtendFrameIntoClientArea {
-            // no error checking here...
-            impl_DwmExtendFrameIntoClientArea(hwnd, &MARGINS {
+    if no_decorations {
+        if let Some(DwmExtendFrameIntoClientArea) = GetProcAddress(hDwmAPI_DLL, "DwmExtendFrameIntoClientArea") {
+            let DwmExtendFrameIntoClientArea: unsafe extern "system" fn(HWND, &MARGINS) -> HRESULT = mem::transmute(DwmExtendFrameIntoClientArea);
+
+            DwmExtendFrameIntoClientArea(hwnd, &MARGINS {
                 cxLeftWidth: -1,
                 cxRightWidth: -1,
                 cyTopHeight: -1,
@@ -264,80 +349,106 @@ fn create_opengl_window() -> windows::Result<HWND> {
         }
     }
 
+    FreeLibrary(hDwmAPI_DLL);
 
-    return Ok(hwnd);
+    Ok(())
 }
 
 unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
 
-    let mut hRC = GetWindowLongPtr(hwnd, ); // HGLRC::NULL;
+    if msg == WM_NCCREATE {
+        let createstruct: *mut CREATESTRUCTW = mem::transmute(lparam);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, mem::transmute((*createstruct).lpCreateParams));
+    } else {
+        let window_data: *mut WindowsWindowData = mem::transmute(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        let window_data: &mut WindowsWindowData = &mut *window_data;
 
-    match msg {
-        WM_CREATE => { },
-        WM_MOUSELEAVE => {
-            // cursor_needs_setting = TRUE;
-        },
-        WM_MOUSEMOVE => {
-            // if( cursor_needs_setting ) {
-            //     SetClassLongPtr(hwnd, GCLP_HCURSOR, (LONG_PTR)LoadCursor(NULL, IDC_ARROW));
-            //     cursor_needs_setting = FALSE;
-            // }
-        },
-        WM_DESTROY => unsafe {
-            wglMakeCurrent(NULL,NULL);
-            wglDeleteContext(hRC);
-            PostQuitMessage(0);
-        },
-        WM_PAINT => unsafe {
-            let hDC = GetDC(hwnd);
-            let mut rect = RECT::NULL;
-            GetClientRect(hwnd, &mut rect);
+        match msg {
+            WM_CREATE => { },
+            WM_NCMOUSELEAVE => {
+                // cursor_needs_setting = TRUE;
+            },
+            WM_MOUSEMOVE => {
+                // if( cursor_needs_setting ) {
+                //     SetClassLongPtr(hwnd, GCLP_HCURSOR, (LONG_PTR)LoadCursor(NULL, IDC_ARROW));
+                //     cursor_needs_setting = FALSE;
+                // }
+            },
+            WM_DESTROY => {
+                // destruct the window data
+                let window_data = Box::from_raw(GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut WindowsWindowData);
+                wglMakeCurrent(HDC::NULL, HGLRC::NULL);
+                if let Ok(mut lock) = window_data.gl_context.lock() {
+                    let lock = &mut *lock;
+                    if let Some(context) = lock.as_mut() {
+                        wglDeleteContext(context.hrc);
+                    }
+                }
+                PostQuitMessage(0);
+            },
+            WM_PAINT => {
+                let hDC = GetDC(hwnd);
+                // if hDC.is_mull();
 
-            wglMakeCurrent(hDC, hRC);
+                let mut rect = RECT::default();
+                GetClientRect(hwnd, &mut rect);
 
-            glViewport(0, 0, rect.right, rect.bottom);
-            glClearColor(0.0, 0.0, 0.0, 0.0);
-            glClearDepth(1.0);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                if let Ok(mut lock) = window_data.gl_context.lock() {
+                    let lock = &mut *lock;
+                    if let Some(context) = lock.as_mut() {
+                        wglMakeCurrent(hDC, context.hrc);
 
-            // OpenGL calls go here ...
+                        context.gl.viewport(0, 0, rect.right, rect.bottom);
+                        context.gl.clear_color(0.0, 0.0, 0.0, 0.0);
+                        context.gl.clear_depth(1.0);
+                        context.gl.clear(gleam::gl::COLOR_BUFFER_BIT | gleam::gl::DEPTH_BUFFER_BIT);
 
-            /*
-                glMatrixMode(GL_PROJECTION);
-                glLoadIdentity();
-                glOrtho(-ratio, ratio, -1., 1., -1, 1);
+                        // OpenGL calls go here ...
 
-                glMatrixMode(GL_MODELVIEW);
-                glLoadIdentity();
+                        /*
+                            glMatrixMode(GL_PROJECTION);
+                            glLoadIdentity();
+                            glOrtho(-ratio, ratio, -1., 1., -1, 1);
 
-                float const cos60 = cosf(M_PI*60.0/180.0);
-                float const sin60 = sinf(M_PI*60.0/180.0);
+                            glMatrixMode(GL_MODELVIEW);
+                            glLoadIdentity();
 
-                GLfloat const triangle[] = {
-                    -1.0, -sin60, 1.0, 0.0, 0.0,
-                     1.0, -sin60, 0.0, 1.0, 0.0,
-                     0.0,  sin60, 0.0, 0.0, 1.0
-                };
+                            float const cos60 = cosf(M_PI*60.0/180.0);
+                            float const sin60 = sinf(M_PI*60.0/180.0);
 
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                            GLfloat const triangle[] = {
+                                -1.0, -sin60, 1.0, 0.0, 0.0,
+                                 1.0, -sin60, 0.0, 1.0, 0.0,
+                                 0.0,  sin60, 0.0, 0.0, 1.0
+                            };
 
-                glEnableClientState(GL_VERTEX_ARRAY);
-                glEnableClientState(GL_COLOR_ARRAY);
+                            glEnable(GL_BLEND);
+                            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-                glVertexPointer(2, GL_FLOAT, sizeof(GLfloat)*5, &triangle[0]);
-                glColorPointer( 3, GL_FLOAT, sizeof(GLfloat)*5, &triangle[0]);
+                            glEnableClientState(GL_VERTEX_ARRAY);
+                            glEnableClientState(GL_COLOR_ARRAY);
 
-                glDrawArrays(GL_TRIANGLES, 0, 3);
-            */
+                            glVertexPointer(2, GL_FLOAT, sizeof(GLfloat)*5, &triangle[0]);
+                            glColorPointer( 3, GL_FLOAT, sizeof(GLfloat)*5, &triangle[0]);
 
-            SwapBuffers(hDC);
-            glFinish(); // OpenGL 3?
+                            glDrawArrays(GL_TRIANGLES, 0, 3);
+                        */
 
-            wglMakeCurrent(NULL, NULL);
-            ReleaseDC(hwnd, hDC);
-        },
-        _ => { }
+                        SwapBuffers(hDC);
+                        context.gl.finish(); // TODO: OpenGL 3?
+
+                        wglMakeCurrent(HDC::NULL, HGLRC::NULL);
+                    } else {
+                        // TODO: software rendering
+                    }
+                } else {
+                    // TODO: software rendering
+                }
+
+                ReleaseDC(hwnd, hDC);
+            },
+            _ => { }
+        }
     }
 
     DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -345,19 +456,31 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
 
 fn main() -> windows::Result<()> {
 
-    let hwnd = create_opengl_window()?;
+    let (hwnd, context_arc) = create_window()?;
+
+    if let Err(e) = create_opengl_context(hwnd, context_arc) {
+        // log error but do not panic: opengl context is not required for running
+        println!("ERROR initializing OpenGL, continuing in software rendering mode: {}", e.message());
+    }
+
+    if let Err(e) = unsafe { set_window_transparency_and_region(hwnd, /* transparent window */ true, /* no decorations */ true) } {
+        println!("ERROR setting transparency and region: {}", e.message());
+    }
+
     let mut msg = MSG::default();
 
     unsafe {
         UpdateWindow(hwnd);
         ShowWindow(hwnd, SW_SHOW | SW_MAXIMIZE);
-        while GetMessageW(&mut msg, hwnd, 0, 0) > 0 {
+        while GetMessageW(&mut msg, hwnd, 0, 0).0 > 0 {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
 
-    // return msg.wParam;
-
-    Ok(())
+    if msg.wParam.0 == 0 {
+        Ok(())
+    } else {
+        Err(windows::Error::new(windows::HRESULT::from_thread(), "Error while running application"))
+    }
 }
