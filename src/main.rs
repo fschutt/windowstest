@@ -1,18 +1,29 @@
 #![allow(non_snake_case)]
 #![windows_subsystem = "windows"]
+#![no_main]
+#![no_std]
 
-pub mod bindings {
-    windows::include_bindings!();
-}
+extern crate core;
+extern crate alloc;
 
-use std::{ptr, mem};
-use std::ffi::{OsStr, c_void};
-use std::os::windows::ffi::OsStrExt;
-use std::sync::{Arc, Mutex};
-use std::rc::Rc;
+use core::{ptr, mem};
+use core::ffi::c_void;
+use core::panic::PanicInfo;
+
+use alloc::rc::Rc;
+use alloc::cell::RefCell;
+use libc_alloc::LibcAlloc;
 
 use gleam::gl::GlFns;
 use gleam::gl::Gl;
+
+#[global_allocator]
+static ALLOCATOR: LibcAlloc = LibcAlloc;
+
+#[panic_handler]
+fn panic(_panic: &PanicInfo<'_>) -> ! { loop {} }
+
+/*
 use bindings::{
     Windows::Win32::{
         System::LibraryLoader::{LoadLibraryW, FreeLibrary, GetModuleHandleW, GetProcAddress},
@@ -38,6 +49,8 @@ use bindings::{
     },
 };
 use windows::HRESULT;
+*/
+
 
 // windef.h
 const TRUE: i32 = 1;
@@ -47,14 +60,15 @@ const CLASS_NAME: &str = "Window Class";
 enum WindowsWindowCreateError {
     FailedToCreateHInstance(HRESULT),
     FailedToCreateHWND(HRESULT),
-    FailedToGetDC(HRESULT),
 }
 
 enum WindowsOpenGlError {
+    OpenGL32DllNotFound(HRESULT),
+    FailedToGetDC(HRESULT),
     FailedToGetPixelFormat(HRESULT),
     NoMatchingPixelFormat(HRESULT),
     OpenGLNotAvailable(HRESULT),
-
+    FailedToStoreContext(HRESULT),
 }
 
 enum WindowsStartupError {
@@ -64,7 +78,7 @@ enum WindowsStartupError {
 
 struct WindowsWindowData {
     // OpenGL 3.1 context pointer
-    gl_context: Arc<Mutex<Option<WindowsGlContext>>>,
+    gl_context: Rc<RefCell<Option<WindowsGlContext>>>,
 }
 
 struct WindowsGlContext {
@@ -76,14 +90,16 @@ struct WindowsGlContext {
     gl: Rc<dyn Gl>,
 }
 
-fn create_window() -> windows::Result<(HWND, Arc<Mutex<Option<WindowsGlContext>>>)> {
+fn create_window() -> Result<(HWND, Rc<RefCell<Option<WindowsGlContext>>>), WindowsWindowCreateError> {
+    use self::WindowsWindowCreateError::*;
+
     let app_instance = unsafe { GetModuleHandleW(PWSTR::NULL) };
     if app_instance.is_null() {
-        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to create HINSTANCE (GetModuleHandleW failed)"));
+        return Err(FailedToCreateHInstance(HRESULT::from_thread()));
     }
 
-    let mut class_name = OsStr::new(CLASS_NAME)
-        .encode_wide()
+    let mut class_name = CLASS_NAME
+        .encode_utf16()
         .chain(Some(0).into_iter())
         .collect::<Vec<_>>();
 
@@ -100,7 +116,7 @@ fn create_window() -> windows::Result<(HWND, Arc<Mutex<Option<WindowsGlContext>>
     // error can be ignored
     unsafe { RegisterClassW(&wc) };
 
-    let context_arc = Arc::new(Mutex::new(None));
+    let context_arc = Rc::new(RefCell::new(None));
     let window_data = Box::new(WindowsWindowData {
         gl_context: context_arc.clone()
     });
@@ -125,29 +141,27 @@ fn create_window() -> windows::Result<(HWND, Arc<Mutex<Option<WindowsGlContext>>
     ) };
 
     if hwnd.is_null() {
-        Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to create HWND (CreateWindowExW failed)"))
+        Err(FailedToCreateHWND(windows::HRESULT::from_thread()))
     } else {
         Ok((hwnd, context_arc))
     }
 }
 
 // function can fail: creates an OpenGL context on the HWND, stores the context on the window-associated data
-fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlContext>>>) -> windows::Result<()> {
+fn create_opengl_context(hwnd: HWND, context_arc: Rc<RefCell<Option<WindowsGlContext>>>) -> Result<(), WindowsOpenGlError> {
+
+    use self::WindowsOpenGlError::*;
 
     // -- window created, now create OpenGL context
 
-    let opengl32_dll = match unsafe { load_opengl32_dll() } {
-        Some(s) => s,
-        None => {
-            return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to open opengl32.dll (missing OpenGL?)"));
-        }
-    };
+    let opengl32_dll = unsafe { LoadLibraryW("opengl32.dll") };
+    if opengl32_dll.is_null() { return Err(OpenGL32DllNotFound(HRESULT::from_thread())); }
 
     // Get DC
     let hDC = unsafe { GetDC(hwnd) };
     if hDC.is_null()  {
         // unsafe { DestroyWindow(hwnd) };
-        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to get drawing context (GetDC(hwnd) failed)"));
+        return Err(FailedToGetDC(HRESULT::from_thread()));
     }
 
     // now this is a kludge; we need to pass something in the PIXELFORMATDESCRIPTOR
@@ -193,7 +207,7 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
             // can't even set the default fallback pixel format: no OpenGL possible
             ReleaseDC(hwnd, hDC);
             // DestroyWindow(hwnd);
-            return Err(windows::Error::new(windows::HRESULT::from_thread(), "OS has no matching default pixel format"));
+            return Err(NoMatchingPixelFormat(HRESULT::from_thread()));
         }
     }
 
@@ -237,7 +251,7 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
         if !SetPixelFormat(hDC, transparent_opengl_pixelformat_index, &pfd).as_bool() {
             ReleaseDC(hwnd, hDC);
             // DestroyWindow(hwnd);
-            return Err(windows::Error::new(windows::HRESULT::from_thread(), "OS has no matching pixel format (num_pixel_formats = 0)"));
+            return Err(NoMatchingPixelFormat(HRESULT::from_thread()));
         }
     }
 
@@ -264,11 +278,11 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
             ReleaseDC(hwnd, hDC);
             // DestroyWindow(hwnd);
         }
-        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Could not create OpenGL 3.1 context (wglarb_CreateContextAttribsARB failed)"));
+        return Err(OpenGLNotAvailable(HRESULT::from_thread()));
     }
 
     // store hRC in the windows application data
-    if let Ok(mut lock) = context_arc.lock() {
+    if let Ok(mut lock) = context_arc.try_borrow() {
         let lock = &mut *lock;
         if let Some(context) = lock.as_mut() {
             unsafe { wglDeleteContext(context.hrc); }
@@ -304,7 +318,7 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
             ReleaseDC(hwnd, hDC);
             // DestroyWindow(hwnd);
         }
-        return Err(windows::Error::new(windows::HRESULT::from_thread(), "Could not store context on Window data"));
+        return Err(FailedToStoreContext(HRESULT::from_thread()));
     }
 
     unsafe {
@@ -312,13 +326,6 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
     }
 
     return Ok(());
-}
-
-/// Loads the `opengl32.dll` library.
-unsafe fn load_opengl32_dll() -> Option<HINSTANCE> {
-    let opengl32_dll = LoadLibraryW("opengl32.dll");
-    if opengl32_dll.is_null() { return None; }
-    Some(opengl32_dll)
 }
 
 fn get_transparent_pixel_format_index(hDC: HDC) -> Option<i32> {
@@ -362,10 +369,8 @@ fn get_transparent_pixel_format_index(hDC: HDC) -> Option<i32> {
     let choose_pixel_format_result = unsafe { wglarb_ChoosePixelFormatARB(
         hDC, &attribs[..], ptr::null(), 1, &mut pixel_format, &mut num_pixel_formats
     ) };
-    println!("wgl choose pixel format result: {:?}, num_pixel_formats = {}, chosen = {}", choose_pixel_format_result, num_pixel_formats, pixel_format);
 
     if !choose_pixel_format_result.as_bool() {
-        println!("return none 1");
         return None; // wglarb_ChoosePixelFormatARB failed
     }
 
@@ -449,7 +454,7 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
                 // destruct the window data
                 let window_data = Box::from_raw(GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut WindowsWindowData);
                 wglMakeCurrent(HDC::NULL, HGLRC::NULL);
-                if let Ok(mut lock) = window_data.gl_context.lock() {
+                if let Ok(mut lock) = window_data.gl_context.try_borrow() {
                     let lock = &mut *lock;
                     if let Some(context) = lock.as_mut() {
                         wglDeleteContext(context.hrc);
@@ -465,7 +470,7 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
                 let mut rect = RECT::default();
                 GetClientRect(hwnd, &mut rect);
 
-                if let Ok(mut lock) = window_data.gl_context.lock() {
+                if let Ok(mut lock) = window_data.gl_context.try_borrow() {
                     let lock = &mut *lock;
                     if let Some(context) = lock.as_mut() {
                         wglMakeCurrent(hDC, context.hrc);
@@ -526,17 +531,24 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
     DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
+#[no_mangle] // don't mangle the name of this function
+pub extern "C" fn mainCRTStartup() -> ! {
+    unsafe { ExitProcess(128) }
+}
+
+/*
+
 fn main() -> windows::Result<()> {
 
     let (hwnd, context_arc) = create_window()?;
 
-    if let Err(e) = create_opengl_context(hwnd, context_arc) {
+    if let Err(_) = create_opengl_context(hwnd, context_arc) {
         // log error but do not panic: opengl context is not required for running
-        println!("ERROR initializing OpenGL, continuing in software rendering mode: {}", e.message());
+        // println!("ERROR initializing OpenGL, continuing in software rendering mode: {}", e.message());
     }
 
-    if let Err(e) = unsafe { set_window_transparency_and_region(hwnd, /* transparent window */ true, /* no decorations */ true) } {
-        println!("ERROR setting transparency and region: {}", e.message());
+    if let Err(_) = unsafe { set_window_transparency_and_region(hwnd, /* transparent window */ true, /* no decorations */ true) } {
+        // println!("ERROR setting transparency and region: {}", e.message());
     }
 
     let mut msg = MSG::default();
@@ -557,3 +569,5 @@ fn main() -> windows::Result<()> {
         Err(windows::Error::new(windows::HRESULT::from_thread(), "Error while running application"))
     }
 }
+
+*/

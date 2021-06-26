@@ -2,14 +2,19 @@
 name = "windowstest"
 version = "0.1.0"
 edition = "2018"
-build = "build.rs"
+# build = "build.rs"
 
 [dependencies]
-windows = "0.11.0"
-gleam = "0.13.1"
+# windows = "0.11.0"
+winapi = { version = "0.3.9", default-features = false, features = ["wingdi", "libloaderapi", "winuser", "gl-gl"] }
+gleam = { version = "0.13.1", default-features = false }
+libc_alloc = { git = "https://github.com/daniel5151/libc_alloc" }
 
-[build-dependencies]
-windows = "0.11.0"
+# [build-dependencies]
+# windows = "0.11.0"
+
+[profile.dev]
+panic = "abort"
 
 [profile.release]
 lto = true
