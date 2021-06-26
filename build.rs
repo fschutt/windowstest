@@ -2,7 +2,7 @@ fn main() {
     windows::build! {
         Windows::Win32::{
             UI::WindowsAndMessaging::{
-                RegisterClassW, ShowWindow, CreateWindowExW, DefWindowProcW,
+                RegisterClassW, ShowWindow, CreateWindowExW, DefWindowProcW, AnimateWindow,
                 GetMessageW, TranslateMessage, DispatchMessageW, GetClientRect,
                 DestroyWindow, PostQuitMessage, GetWindowLongPtrW, SetWindowLongPtrW,
                 WNDCLASSW, CW_USEDEFAULT, WINDOW_STYLE,

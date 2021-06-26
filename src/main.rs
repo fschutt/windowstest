@@ -17,16 +17,16 @@ use bindings::{
     Windows::Win32::{
         System::LibraryLoader::{LoadLibraryW, FreeLibrary, GetModuleHandleW, GetProcAddress},
         UI::WindowsAndMessaging::{
-            RegisterClassW, ShowWindow, CreateWindowExW, DefWindowProcW,
+            RegisterClassW, ShowWindow, CreateWindowExW, DefWindowProcW, AnimateWindow, AW_BLEND, AW_HOR_POSITIVE, AW_VER_POSITIVE, AW_ACTIVATE,
             GetMessageW, TranslateMessage, DispatchMessageW, GetClientRect,
             DestroyWindow, PostQuitMessage, GetWindowLongPtrW, SetWindowLongPtrW,
             WNDCLASSW, CS_HREDRAW, CS_VREDRAW, CS_OWNDC,
-            WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, SW_SHOW, SW_MAXIMIZE,
+            WS_OVERLAPPEDWINDOW, WS_POPUP, CW_USEDEFAULT, SW_SHOW, SW_MAXIMIZE, SW_SHOWNORMAL,
             HMENU, MSG, WS_EX_APPWINDOW, CREATESTRUCTW, GWLP_USERDATA,
             WM_NCCREATE, WM_CREATE, WM_NCMOUSELEAVE, WM_MOUSEMOVE, WM_PAINT, WM_DESTROY
         },
         UI::Controls::MARGINS,
-        Foundation::{HWND, PWSTR, LPARAM, WPARAM, LRESULT, BOOL, RECT},
+        Foundation::{HWND, PWSTR, LPARAM, WPARAM, LRESULT, BOOL, RECT, HINSTANCE},
         System::SystemInformation::{GetVersionExW, OSVERSIONINFOW},
         Graphics::OpenGL::{
             HGLRC, PIXELFORMATDESCRIPTOR,
@@ -69,6 +69,10 @@ struct WindowsWindowData {
 
 struct WindowsGlContext {
     hrc: HGLRC,
+    /// OpenGL 1.1 functions are loaded separately (for example glViewport)
+    /// In order to fill out the Rc<Gl> properly, we need to open opengl32.dll
+    /// and use GetProcAddress on the HINSTANCE if GetProcAddress returns null
+    opengl32_dll: HINSTANCE,
     gl: Rc<dyn Gl>,
 }
 
@@ -106,7 +110,7 @@ fn create_window() -> windows::Result<(HWND, Arc<Mutex<Option<WindowsGlContext>>
         WS_EX_APPWINDOW,                // Optional window styles
         CLASS_NAME,                     // Window class
         "Learn to program Windows",     // Window text
-        WS_OVERLAPPEDWINDOW,            // Window style
+        WS_OVERLAPPEDWINDOW | WS_POPUP,            // Window style
 
         // Size and position
         CW_USEDEFAULT,
@@ -132,23 +136,19 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
 
     // -- window created, now create OpenGL context
 
+    let opengl32_dll = match unsafe { load_opengl32_dll() } {
+        Some(s) => s,
+        None => {
+            return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to open opengl32.dll (missing OpenGL?)"));
+        }
+    };
+
     // Get DC
     let hDC = unsafe { GetDC(hwnd) };
     if hDC.is_null()  {
         // unsafe { DestroyWindow(hwnd) };
         return Err(windows::Error::new(windows::HRESULT::from_thread(), "Failed to get drawing context (GetDC(hwnd) failed)"));
     }
-
-    let transparent_opengl_pixelformat_index = match get_transparent_pixel_format_index(hDC) {
-        Some(i) => i,
-        None => {
-            unsafe {
-                ReleaseDC(hwnd, hDC);
-                // DestroyWindow(hwnd);
-            }
-            return Err(windows::Error::new(windows::HRESULT::from_thread(), "Transparent OpenGL context not supported"));
-        }
-    };
 
     // now this is a kludge; we need to pass something in the PIXELFORMATDESCRIPTOR
     // to SetPixelFormat; it will be ignored, mostly. OTOH we want to send something
@@ -186,6 +186,52 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
         dwDamageMask: 0,
     };
 
+    let default_pixel_format = unsafe { ChoosePixelFormat(hDC, &pfd) };
+    unsafe {
+        DescribePixelFormat(hDC, default_pixel_format, mem::size_of::<PIXELFORMATDESCRIPTOR>() as u32, &mut pfd);
+        if !SetPixelFormat(hDC, default_pixel_format, &pfd).as_bool() {
+            // can't even set the default fallback pixel format: no OpenGL possible
+            ReleaseDC(hwnd, hDC);
+            // DestroyWindow(hwnd);
+            return Err(windows::Error::new(windows::HRESULT::from_thread(), "OS has no matching default pixel format"));
+        }
+    }
+
+    // wglGetProcAddress will fail if there is no context being current,
+    // create a dummy context and activate it
+    let dummy_context = unsafe {
+        let dc = wglCreateContext(hDC);
+        wglMakeCurrent(hDC, dc);
+        dc
+    };
+
+    let mut b_transparent_succeeded = false;
+    let transparent_opengl_pixelformat_index = match get_transparent_pixel_format_index(hDC) {
+        Some(i) => { b_transparent_succeeded = true; i },
+        None => default_pixel_format,
+    };
+
+    // if the transparent pixel format is available, try getting the wglCreateContextAttribsARB function
+    // while the context is active
+    let mut CreateContextAttribsARB: Option<unsafe extern "system" fn(HDC, HGLRC, *const [i32]) -> HGLRC> = None;
+    let CreateContextAttribsARB = if b_transparent_succeeded {
+        unsafe {
+            wglGetProcAddress("wglCreateContextAttribsARB").map(|s| {
+                let w: unsafe extern "system" fn(HDC, HGLRC, *const [i32]) -> HGLRC = mem::transmute(s);
+                w
+            })
+        }
+    } else {
+        None
+    };
+
+    // destroy the dummy context
+    unsafe {
+        wglMakeCurrent(HDC::NULL, HGLRC::NULL);
+        wglDeleteContext(dummy_context);
+    }
+
+    // set the new pixel format. if transparency is not available, this will fallback to the default PFD
     unsafe {
         DescribePixelFormat(hDC, transparent_opengl_pixelformat_index, mem::size_of::<PIXELFORMATDESCRIPTOR>() as u32, &mut pfd);
         if !SetPixelFormat(hDC, transparent_opengl_pixelformat_index, &pfd).as_bool() {
@@ -206,19 +252,13 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
         0, 0
     ];
 
-    let wglarb_CreateContextAttribsARB = unsafe { wglGetProcAddress("wglCreateContextAttribsARB") };
-    let wglarb_CreateContextAttribsARB: unsafe extern "system" fn(HDC, HGLRC, *const [i32]) -> HGLRC  = match wglarb_CreateContextAttribsARB {
-        None => {
-            unsafe {
-                ReleaseDC(hwnd, hDC);
-                // DestroyWindow(hwnd);
-            }
-            return Err(windows::Error::new(windows::HRESULT::from_thread(), "Could not create OpenGL 3.1 context (wglarb_CreateContextAttribsARB not found)"));
+    let hRC = match CreateContextAttribsARB {
+        Some(wglarb_CreateContextAttribsARB) => unsafe {
+            wglarb_CreateContextAttribsARB(hDC, HGLRC::NULL, &context_attribs[..])
         },
-        Some(s) => unsafe { mem::transmute(s) },
+        None => unsafe { wglCreateContext(hDC) },
     };
 
-    let hRC = unsafe { wglarb_CreateContextAttribsARB(hDC, HGLRC::NULL, &context_attribs[..]) };
     if hRC.is_null() {
         unsafe {
             ReleaseDC(hwnd, hDC);
@@ -233,13 +273,30 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
         if let Some(context) = lock.as_mut() {
             unsafe { wglDeleteContext(context.hrc); }
         }
-        let loaded_function_pointers = unsafe { GlFns::load_with(|func_name| match wglGetProcAddress(func_name) {
-            Some(s) => mem::transmute(s),
-            None => ptr::null(),
+        unsafe { wglMakeCurrent(hDC, hRC) };
+        let loaded_function_pointers = unsafe { GlFns::load_with(|func_name| {
+            let address = wglGetProcAddress(func_name);
+            match address {
+                Some(s) => mem::transmute(s),
+                None => {
+
+                    // OpenGL 1.1 functions (such as glViewport) are missing, load
+                    // them from opengl32.dll
+
+                    // NOTE: regular GetProcAddress, not wglGetProcAddress!
+                    match GetProcAddress(opengl32_dll, func_name) {
+                        Some(s) => mem::transmute(s),
+                        None => ptr::null(),
+                    }
+                },
+            }
         }) };
+
+        unsafe { wglMakeCurrent(HDC::NULL, HGLRC::NULL) };
 
         *lock = Some(WindowsGlContext {
             hrc: hRC,
+            opengl32_dll,
             gl: loaded_function_pointers,
         });
     } else {
@@ -255,6 +312,13 @@ fn create_opengl_context(hwnd: HWND, context_arc: Arc<Mutex<Option<WindowsGlCont
     }
 
     return Ok(());
+}
+
+/// Loads the `opengl32.dll` library.
+unsafe fn load_opengl32_dll() -> Option<HINSTANCE> {
+    let opengl32_dll = LoadLibraryW("opengl32.dll");
+    if opengl32_dll.is_null() { return None; }
+    Some(opengl32_dll)
 }
 
 fn get_transparent_pixel_format_index(hDC: HDC) -> Option<i32> {
@@ -293,18 +357,25 @@ fn get_transparent_pixel_format_index(hDC: HDC) -> Option<i32> {
     let mut pixel_format = 0;
     let mut num_pixel_formats = 0;
 
-    let wglarb_ChoosePixelFormatARB = unsafe { wglGetProcAddress("wglChoosePixelFormatARB") }?;
+    let wglarb_ChoosePixelFormatARB = unsafe { wglGetProcAddress("wglChoosePixelFormatARB").or(wglGetProcAddress("wglChoosePixelFormatEXT")) }?;
     let wglarb_ChoosePixelFormatARB: unsafe extern "system" fn(HDC, *const [i32], *const f32, u32, &mut i32, &mut u32) -> BOOL = unsafe { mem::transmute(wglarb_ChoosePixelFormatARB) };
     let choose_pixel_format_result = unsafe { wglarb_ChoosePixelFormatARB(
         hDC, &attribs[..], ptr::null(), 1, &mut pixel_format, &mut num_pixel_formats
     ) };
+    println!("wgl choose pixel format result: {:?}, num_pixel_formats = {}, chosen = {}", choose_pixel_format_result, num_pixel_formats, pixel_format);
+
     if !choose_pixel_format_result.as_bool() {
+        println!("return none 1");
         return None; // wglarb_ChoosePixelFormatARB failed
     }
 
     // pixel format is now the index of the PIXELFORMATDESCRIPTOR
     // that can handle a transparent OpenGL context
-    if num_pixel_formats == 0 { None } else { Some(pixel_format) }
+    if num_pixel_formats == 0 {
+        None
+    } else {
+        Some(pixel_format)
+    }
 }
 
 unsafe fn set_window_transparency_and_region(hwnd: HWND, transparent: bool, no_decorations: bool) -> windows::Result<()> {
@@ -382,6 +453,7 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
                     let lock = &mut *lock;
                     if let Some(context) = lock.as_mut() {
                         wglDeleteContext(context.hrc);
+                        FreeLibrary(context.opengl32_dll);
                     }
                 }
                 PostQuitMessage(0);
@@ -470,8 +542,9 @@ fn main() -> windows::Result<()> {
     let mut msg = MSG::default();
 
     unsafe {
-        UpdateWindow(hwnd);
-        ShowWindow(hwnd, SW_SHOW | SW_MAXIMIZE);
+        ShowWindow(hwnd, SW_SHOWNORMAL | SW_MAXIMIZE);
+        // AnimateWindow(hwnd, 200, AW_ACTIVATE | AW_VER_POSITIVE);
+
         while GetMessageW(&mut msg, hwnd, 0, 0).0 > 0 {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
