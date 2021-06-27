@@ -1,17 +1,19 @@
 #![allow(non_snake_case)]
 #![windows_subsystem = "windows"]
-#![no_main]
 #![no_std]
+#![no_main]
 
 extern crate core;
 extern crate alloc;
 
 use core::{ptr, mem};
-use core::ffi::c_void;
 use core::panic::PanicInfo;
+use core::cell::RefCell;
 
 use alloc::rc::Rc;
-use alloc::cell::RefCell;
+use alloc::vec::Vec;
+use alloc::boxed::Box;
+
 use libc_alloc::LibcAlloc;
 
 use gleam::gl::GlFns;
@@ -20,40 +22,46 @@ use gleam::gl::Gl;
 #[global_allocator]
 static ALLOCATOR: LibcAlloc = LibcAlloc;
 
+/*
 #[panic_handler]
 fn panic(_panic: &PanicInfo<'_>) -> ! { loop {} }
-
-/*
-use bindings::{
-    Windows::Win32::{
-        System::LibraryLoader::{LoadLibraryW, FreeLibrary, GetModuleHandleW, GetProcAddress},
-        UI::WindowsAndMessaging::{
-            RegisterClassW, ShowWindow, CreateWindowExW, DefWindowProcW, AnimateWindow, AW_BLEND, AW_HOR_POSITIVE, AW_VER_POSITIVE, AW_ACTIVATE,
-            GetMessageW, TranslateMessage, DispatchMessageW, GetClientRect,
-            DestroyWindow, PostQuitMessage, GetWindowLongPtrW, SetWindowLongPtrW,
-            WNDCLASSW, CS_HREDRAW, CS_VREDRAW, CS_OWNDC,
-            WS_OVERLAPPEDWINDOW, WS_POPUP, CW_USEDEFAULT, SW_SHOW, SW_MAXIMIZE, SW_SHOWNORMAL,
-            HMENU, MSG, WS_EX_APPWINDOW, CREATESTRUCTW, GWLP_USERDATA,
-            WM_NCCREATE, WM_CREATE, WM_NCMOUSELEAVE, WM_MOUSEMOVE, WM_PAINT, WM_DESTROY
-        },
-        UI::Controls::MARGINS,
-        Foundation::{HWND, PWSTR, LPARAM, WPARAM, LRESULT, BOOL, RECT, HINSTANCE},
-        System::SystemInformation::{GetVersionExW, OSVERSIONINFOW},
-        Graphics::OpenGL::{
-            HGLRC, PIXELFORMATDESCRIPTOR,
-            wglMakeCurrent, wglDeleteContext, wglCreateContext, wglGetProcAddress,
-            ChoosePixelFormat, SetPixelFormat, SwapBuffers, DescribePixelFormat,
-        },
-        Graphics::Gdi::{GetDC, HDC, HRGN, ReleaseDC, UpdateWindow, PFD_DRAW_TO_WINDOW, PFD_SUPPORT_OPENGL, PFD_DOUBLEBUFFER, PFD_TYPE_RGBA, PFD_MAIN_PLANE },
-        Graphics::Dwm::{DWM_BLURBEHIND, DWM_BB_ENABLE},
-    },
-};
-use windows::HRESULT;
 */
 
+use winapi::{
+    ctypes::c_void,
+    shared::{
+        windef::{HWND, RECT, HGLRC, HDC, },
+        ntdef::{PWSTR, HRESULT},
+        minwindef::{LPARAM, WPARAM, LRESULT, BOOL, HINSTANCE, HRGN, TRUE},
+    },
+    um::{
+        errhandlingapi::GetLastError,
+        libloaderapi::{LoadLibraryW, FreeLibrary, GetModuleHandleW, GetProcAddress},
+        winuser::{
+            RegisterClassW, ShowWindow, CreateWindowExW, DefWindowProcW,
+            GetMessageW, TranslateMessage, DispatchMessageW, GetClientRect,
+            PostQuitMessage, GetWindowLongPtrW, SetWindowLongPtrW,
+            WNDCLASSW, CS_HREDRAW, CS_VREDRAW, CS_OWNDC,
+            WS_OVERLAPPEDWINDOW, WS_POPUP, CW_USEDEFAULT, SW_MAXIMIZE, SW_SHOWNORMAL,
+            MSG, WS_EX_APPWINDOW, CREATESTRUCTW, GWLP_USERDATA,
+            WM_NCCREATE, WM_CREATE, WM_NCMOUSELEAVE, WM_MOUSEMOVE, WM_PAINT, WM_DESTROY,
 
-// windef.h
-const TRUE: i32 = 1;
+            GetDC, ReleaseDC,
+        },
+        uxtheme::MARGINS,
+        dwmapi::{DWM_BLURBEHIND, DWM_BB_ENABLE},
+        winnt::OSVERSIONINFOW,
+        sysinfoapi::GetVersionExW,
+        wingdi::{
+            PIXELFORMATDESCRIPTOR,
+            wglMakeCurrent, wglDeleteContext, wglCreateContext, wglGetProcAddress,
+            ChoosePixelFormat, SetPixelFormat, SwapBuffers, DescribePixelFormat,
+
+            PFD_DRAW_TO_WINDOW, PFD_SUPPORT_OPENGL, PFD_DOUBLEBUFFER,
+            PFD_TYPE_RGBA, PFD_MAIN_PLANE
+        },
+    }
+};
 
 const CLASS_NAME: &str = "Window Class";
 
@@ -93,24 +101,20 @@ struct WindowsGlContext {
 fn create_window() -> Result<(HWND, Rc<RefCell<Option<WindowsGlContext>>>), WindowsWindowCreateError> {
     use self::WindowsWindowCreateError::*;
 
-    let app_instance = unsafe { GetModuleHandleW(PWSTR::NULL) };
+    let app_instance = unsafe { GetModuleHandleW(ptr::null_mut()) };
     if app_instance.is_null() {
-        return Err(FailedToCreateHInstance(HRESULT::from_thread()));
+        return Err(FailedToCreateHInstance(get_last_error()));
     }
 
-    let mut class_name = CLASS_NAME
-        .encode_utf16()
-        .chain(Some(0).into_iter())
-        .collect::<Vec<_>>();
+    let mut class_name = encode_wide(CLASS_NAME);
+    let mut window_title = encode_wide("Learn to program Windows");
 
     // Register the application class
-    let wc = WNDCLASSW {
-        style: CS_HREDRAW | CS_VREDRAW | CS_OWNDC,
-        hInstance: app_instance,
-        lpszClassName: PWSTR(class_name.as_mut_ptr()),
-        lpfnWndProc:  Some(WindowProc), // DefWindowProcW
-        .. Default::default()
-    };
+    let mut wc: WNDCLASSW = unsafe { mem::zeroed() };
+    wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wc.hInstance = app_instance;
+    wc.lpszClassName = class_name.as_mut_ptr();
+    wc.lpfnWndProc = Some(WindowProc);
 
     // RegisterClass can fail if the same class is registered twice,
     // error can be ignored
@@ -123,10 +127,10 @@ fn create_window() -> Result<(HWND, Rc<RefCell<Option<WindowsGlContext>>>), Wind
 
     // Create the window.
     let hwnd = unsafe { CreateWindowExW(
-        WS_EX_APPWINDOW,                // Optional window styles
-        CLASS_NAME,                     // Window class
-        "Learn to program Windows",     // Window text
-        WS_OVERLAPPEDWINDOW | WS_POPUP,            // Window style
+        WS_EX_APPWINDOW,                    // Optional window styles
+        class_name.as_mut_ptr(),                // Window class
+        window_title.as_mut_ptr(),              // Window text
+        WS_OVERLAPPEDWINDOW | WS_POPUP,     // Window style
 
         // Size and position
         CW_USEDEFAULT,
@@ -134,17 +138,37 @@ fn create_window() -> Result<(HWND, Rc<RefCell<Option<WindowsGlContext>>>), Wind
         CW_USEDEFAULT,
         CW_USEDEFAULT,
 
-        HWND::NULL,         // Parent window
-        HMENU::NULL,        // Menu
+        ptr::null_mut(),         // Parent window
+        ptr::null_mut(),        // Menu
         app_instance,       // Instance handle
         Box::leak(window_data) as *mut WindowsWindowData as *mut c_void,    // Additional application data
     ) };
 
     if hwnd.is_null() {
-        Err(FailedToCreateHWND(windows::HRESULT::from_thread()))
+        Err(FailedToCreateHWND(get_last_error()))
     } else {
         Ok((hwnd, context_arc))
     }
+}
+
+fn encode_wide(input: &str) -> Vec<u16> {
+    input
+    .encode_utf16()
+    .chain(Some(0).into_iter())
+    .collect::<Vec<_>>()
+}
+
+fn encode_ascii(input: &str) -> Vec<i8> {
+    input
+    .chars()
+    .filter(|c| c.is_ascii())
+    .map(|c| c as i8)
+    .chain(Some(0).into_iter())
+    .collect::<Vec<_>>()
+}
+
+fn get_last_error() -> HRESULT {
+   (unsafe { GetLastError() }) as HRESULT
 }
 
 // function can fail: creates an OpenGL context on the HWND, stores the context on the window-associated data
@@ -154,14 +178,15 @@ fn create_opengl_context(hwnd: HWND, context_arc: Rc<RefCell<Option<WindowsGlCon
 
     // -- window created, now create OpenGL context
 
-    let opengl32_dll = unsafe { LoadLibraryW("opengl32.dll") };
-    if opengl32_dll.is_null() { return Err(OpenGL32DllNotFound(HRESULT::from_thread())); }
+    let mut dll_name = encode_wide("opengl32.dll");
+    let opengl32_dll = unsafe { LoadLibraryW(dll_name.as_mut_ptr()) };
+    if opengl32_dll.is_null() { return Err(OpenGL32DllNotFound(get_last_error())); }
 
     // Get DC
     let hDC = unsafe { GetDC(hwnd) };
     if hDC.is_null()  {
         // unsafe { DestroyWindow(hwnd) };
-        return Err(FailedToGetDC(HRESULT::from_thread()));
+        return Err(FailedToGetDC(get_last_error()));
     }
 
     // now this is a kludge; we need to pass something in the PIXELFORMATDESCRIPTOR
@@ -203,11 +228,11 @@ fn create_opengl_context(hwnd: HWND, context_arc: Rc<RefCell<Option<WindowsGlCon
     let default_pixel_format = unsafe { ChoosePixelFormat(hDC, &pfd) };
     unsafe {
         DescribePixelFormat(hDC, default_pixel_format, mem::size_of::<PIXELFORMATDESCRIPTOR>() as u32, &mut pfd);
-        if !SetPixelFormat(hDC, default_pixel_format, &pfd).as_bool() {
+        if !SetPixelFormat(hDC, default_pixel_format, &pfd) == TRUE {
             // can't even set the default fallback pixel format: no OpenGL possible
             ReleaseDC(hwnd, hDC);
             // DestroyWindow(hwnd);
-            return Err(NoMatchingPixelFormat(HRESULT::from_thread()));
+            return Err(NoMatchingPixelFormat(get_last_error()));
         }
     }
 
@@ -229,11 +254,15 @@ fn create_opengl_context(hwnd: HWND, context_arc: Rc<RefCell<Option<WindowsGlCon
     // while the context is active
     let mut CreateContextAttribsARB: Option<unsafe extern "system" fn(HDC, HGLRC, *const [i32]) -> HGLRC> = None;
     let CreateContextAttribsARB = if b_transparent_succeeded {
+        let mut func_name = encode_ascii("wglCreateContextAttribsARB");
         unsafe {
-            wglGetProcAddress("wglCreateContextAttribsARB").map(|s| {
-                let w: unsafe extern "system" fn(HDC, HGLRC, *const [i32]) -> HGLRC = mem::transmute(s);
-                w
-            })
+            let proc_address = wglGetProcAddress(func_name.as_mut_ptr());
+            if proc_address == ptr::null_mut() {
+                None
+            } else {
+                let w: unsafe extern "system" fn(HDC, HGLRC, *const [i32]) -> HGLRC = mem::transmute(proc_address);
+                Some(w)
+            }
         }
     } else {
         None
@@ -241,17 +270,17 @@ fn create_opengl_context(hwnd: HWND, context_arc: Rc<RefCell<Option<WindowsGlCon
 
     // destroy the dummy context
     unsafe {
-        wglMakeCurrent(HDC::NULL, HGLRC::NULL);
+        wglMakeCurrent(ptr::null_mut(), ptr::null_mut());
         wglDeleteContext(dummy_context);
     }
 
     // set the new pixel format. if transparency is not available, this will fallback to the default PFD
     unsafe {
         DescribePixelFormat(hDC, transparent_opengl_pixelformat_index, mem::size_of::<PIXELFORMATDESCRIPTOR>() as u32, &mut pfd);
-        if !SetPixelFormat(hDC, transparent_opengl_pixelformat_index, &pfd).as_bool() {
+        if SetPixelFormat(hDC, transparent_opengl_pixelformat_index, &pfd) != TRUE {
             ReleaseDC(hwnd, hDC);
             // DestroyWindow(hwnd);
-            return Err(NoMatchingPixelFormat(HRESULT::from_thread()));
+            return Err(NoMatchingPixelFormat(get_last_error()));
         }
     }
 
@@ -268,7 +297,7 @@ fn create_opengl_context(hwnd: HWND, context_arc: Rc<RefCell<Option<WindowsGlCon
 
     let hRC = match CreateContextAttribsARB {
         Some(wglarb_CreateContextAttribsARB) => unsafe {
-            wglarb_CreateContextAttribsARB(hDC, HGLRC::NULL, &context_attribs[..])
+            wglarb_CreateContextAttribsARB(hDC, ptr::null_mut(), &context_attribs[..])
         },
         None => unsafe { wglCreateContext(hDC) },
     };
@@ -278,35 +307,40 @@ fn create_opengl_context(hwnd: HWND, context_arc: Rc<RefCell<Option<WindowsGlCon
             ReleaseDC(hwnd, hDC);
             // DestroyWindow(hwnd);
         }
-        return Err(OpenGLNotAvailable(HRESULT::from_thread()));
+        return Err(OpenGLNotAvailable(get_last_error()));
     }
 
     // store hRC in the windows application data
-    if let Ok(mut lock) = context_arc.try_borrow() {
+    if let Ok(mut lock) = context_arc.try_borrow_mut() {
+
         let lock = &mut *lock;
         if let Some(context) = lock.as_mut() {
             unsafe { wglDeleteContext(context.hrc); }
         }
+
         unsafe { wglMakeCurrent(hDC, hRC) };
+
         let loaded_function_pointers = unsafe { GlFns::load_with(|func_name| {
-            let address = wglGetProcAddress(func_name);
-            match address {
-                Some(s) => mem::transmute(s),
-                None => {
+            let mut func_name = encode_ascii(func_name);
+            let address = wglGetProcAddress(func_name.as_mut_ptr());
+            match address == ptr::null_mut() {
+                false => mem::transmute(address),
+                true => {
 
                     // OpenGL 1.1 functions (such as glViewport) are missing, load
                     // them from opengl32.dll
 
                     // NOTE: regular GetProcAddress, not wglGetProcAddress!
-                    match GetProcAddress(opengl32_dll, func_name) {
-                        Some(s) => mem::transmute(s),
-                        None => ptr::null(),
+                    let address = GetProcAddress(opengl32_dll, func_name.as_mut_ptr());
+                    match address == ptr::null_mut() {
+                        false => mem::transmute(address),
+                        true => ptr::null_mut(),
                     }
                 },
             }
         }) };
 
-        unsafe { wglMakeCurrent(HDC::NULL, HGLRC::NULL) };
+        unsafe { wglMakeCurrent(ptr::null_mut(), ptr::null_mut()) };
 
         *lock = Some(WindowsGlContext {
             hrc: hRC,
@@ -318,7 +352,7 @@ fn create_opengl_context(hwnd: HWND, context_arc: Rc<RefCell<Option<WindowsGlCon
             ReleaseDC(hwnd, hDC);
             // DestroyWindow(hwnd);
         }
-        return Err(FailedToStoreContext(HRESULT::from_thread()));
+        return Err(FailedToStoreContext(get_last_error()));
     }
 
     unsafe {
@@ -364,13 +398,25 @@ fn get_transparent_pixel_format_index(hDC: HDC) -> Option<i32> {
     let mut pixel_format = 0;
     let mut num_pixel_formats = 0;
 
-    let wglarb_ChoosePixelFormatARB = unsafe { wglGetProcAddress("wglChoosePixelFormatARB").or(wglGetProcAddress("wglChoosePixelFormatEXT")) }?;
+    let mut func_name_1 = encode_ascii("wglChoosePixelFormatARB");
+    let mut func_name_2 = encode_ascii("wglChoosePixelFormatEXT");
+
+    let wgl1_result = unsafe { wglGetProcAddress(func_name_1.as_mut_ptr()) };
+    let wgl2_result = unsafe { wglGetProcAddress(func_name_2.as_mut_ptr()) };
+
+    let wglarb_ChoosePixelFormatARB = if wgl1_result != ptr::null_mut() {
+        wgl1_result
+    } else if wgl2_result != ptr::null_mut() {
+        wgl2_result
+    } else {
+        return None;
+    };
     let wglarb_ChoosePixelFormatARB: unsafe extern "system" fn(HDC, *const [i32], *const f32, u32, &mut i32, &mut u32) -> BOOL = unsafe { mem::transmute(wglarb_ChoosePixelFormatARB) };
     let choose_pixel_format_result = unsafe { wglarb_ChoosePixelFormatARB(
         hDC, &attribs[..], ptr::null(), 1, &mut pixel_format, &mut num_pixel_formats
     ) };
 
-    if !choose_pixel_format_result.as_bool() {
+    if choose_pixel_format_result != TRUE {
         return None; // wglarb_ChoosePixelFormatARB failed
     }
 
@@ -383,37 +429,50 @@ fn get_transparent_pixel_format_index(hDC: HDC) -> Option<i32> {
     }
 }
 
-unsafe fn set_window_transparency_and_region(hwnd: HWND, transparent: bool, no_decorations: bool) -> windows::Result<()> {
+enum SetTransparencyError {
+    DwmNotSupported,
+    DwmApiDllNotFound,
+}
+
+unsafe fn set_window_transparency_and_region(hwnd: HWND, transparent: bool, no_decorations: bool) -> Result<(), SetTransparencyError> {
+
+    use self::SetTransparencyError::*;
 
     if !transparent && !no_decorations {
         return Ok(()); // nothing to do
     }
 
-    let mut os_vinfo = OSVERSIONINFOW::default();
+    let mut os_vinfo: OSVERSIONINFOW = unsafe { mem::zeroed() };
     GetVersionExW(&mut os_vinfo);
     if os_vinfo.dwMajorVersion < 6 {
-        return Ok(()); // compositing not supported
+        return Err(DwmNotSupported); // compositing not supported
     }
 
-    let hDwmAPI_DLL = LoadLibraryW("dwmapi.dll");
+    let mut dll_name = encode_wide("dwmapi.dll");
+    let hDwmAPI_DLL = LoadLibraryW(dll_name.as_mut_ptr());
     if hDwmAPI_DLL.is_null() {
-        return Ok(()); // dwnapi.dll not found
+        return Err(DwmApiDllNotFound); // dwnapi.dll not found
     }
 
     if transparent {
-        if let Some(DwmEnableBlurBehindWindow) = GetProcAddress(hDwmAPI_DLL, "DwmEnableBlurBehindWindow") {
+        let mut func_name = encode_ascii("DwmEnableBlurBehindWindow");
+        let DwmEnableBlurBehindWindow = GetProcAddress(hDwmAPI_DLL, func_name.as_mut_ptr());
+        if DwmEnableBlurBehindWindow != ptr::null_mut() {
             let DwmEnableBlurBehindWindow: unsafe extern "system" fn(HWND, &DWM_BLURBEHIND) -> HRESULT = mem::transmute(DwmEnableBlurBehindWindow);
             DwmEnableBlurBehindWindow(hwnd, &DWM_BLURBEHIND {
                 dwFlags: DWM_BB_ENABLE,
-                fEnable: BOOL(TRUE),
-                hRgnBlur: HRGN::NULL,
-                fTransitionOnMaximized: BOOL(TRUE),
+                fEnable: TRUE,
+                hRgnBlur: ptr::null_mut(),
+                fTransitionOnMaximized: TRUE,
             });
+            // TODO: check error
         }
     }
 
     if no_decorations {
-        if let Some(DwmExtendFrameIntoClientArea) = GetProcAddress(hDwmAPI_DLL, "DwmExtendFrameIntoClientArea") {
+        let mut func_name = encode_ascii("DwmExtendFrameIntoClientArea");
+        let DwmExtendFrameIntoClientArea = GetProcAddress(hDwmAPI_DLL, func_name.as_mut_ptr());
+        if DwmExtendFrameIntoClientArea != ptr::null_mut() {
             let DwmExtendFrameIntoClientArea: unsafe extern "system" fn(HWND, &MARGINS) -> HRESULT = mem::transmute(DwmExtendFrameIntoClientArea);
 
             DwmExtendFrameIntoClientArea(hwnd, &MARGINS {
@@ -422,6 +481,8 @@ unsafe fn set_window_transparency_and_region(hwnd: HWND, transparent: bool, no_d
                 cyTopHeight: -1,
                 cyBottomHeight: -1,
             });
+
+            // TODO: check error
         }
     }
 
@@ -453,8 +514,8 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
             WM_DESTROY => {
                 // destruct the window data
                 let window_data = Box::from_raw(GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut WindowsWindowData);
-                wglMakeCurrent(HDC::NULL, HGLRC::NULL);
-                if let Ok(mut lock) = window_data.gl_context.try_borrow() {
+                wglMakeCurrent(ptr::null_mut(), ptr::null_mut());
+                if let Ok(mut lock) = window_data.gl_context.try_borrow_mut() {
                     let lock = &mut *lock;
                     if let Some(context) = lock.as_mut() {
                         wglDeleteContext(context.hrc);
@@ -467,10 +528,10 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
                 let hDC = GetDC(hwnd);
                 // if hDC.is_mull();
 
-                let mut rect = RECT::default();
+                let mut rect: RECT = mem::zeroed();
                 GetClientRect(hwnd, &mut rect);
 
-                if let Ok(mut lock) = window_data.gl_context.try_borrow() {
+                if let Ok(mut lock) = window_data.gl_context.try_borrow_mut() {
                     let lock = &mut *lock;
                     if let Some(context) = lock.as_mut() {
                         wglMakeCurrent(hDC, context.hrc);
@@ -514,7 +575,7 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
                         SwapBuffers(hDC);
                         context.gl.finish(); // TODO: OpenGL 3?
 
-                        wglMakeCurrent(HDC::NULL, HGLRC::NULL);
+                        wglMakeCurrent(ptr::null_mut(), ptr::null_mut());
                     } else {
                         // TODO: software rendering
                     }
@@ -531,16 +592,13 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
     DefWindowProcW(hwnd, msg, wparam, lparam)
 }
 
-#[no_mangle] // don't mangle the name of this function
-pub extern "C" fn mainCRTStartup() -> ! {
-    unsafe { ExitProcess(128) }
-}
+#[no_mangle]
+pub extern "C" fn main(_argc: isize, _argv: *const *const u8) -> isize {
 
-/*
-
-fn main() -> windows::Result<()> {
-
-    let (hwnd, context_arc) = create_window()?;
+    let (hwnd, context_arc) = match create_window() {
+        Ok(o) => o,
+        Err(_) => return -1,
+    };
 
     if let Err(_) = create_opengl_context(hwnd, context_arc) {
         // log error but do not panic: opengl context is not required for running
@@ -551,23 +609,17 @@ fn main() -> windows::Result<()> {
         // println!("ERROR setting transparency and region: {}", e.message());
     }
 
-    let mut msg = MSG::default();
+
+    let mut msg: MSG = unsafe { mem::zeroed() };
 
     unsafe {
         ShowWindow(hwnd, SW_SHOWNORMAL | SW_MAXIMIZE);
-        // AnimateWindow(hwnd, 200, AW_ACTIVATE | AW_VER_POSITIVE);
 
-        while GetMessageW(&mut msg, hwnd, 0, 0).0 > 0 {
+        while GetMessageW(&mut msg, hwnd, 0, 0) > 0 {
             TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
 
-    if msg.wParam.0 == 0 {
-        Ok(())
-    } else {
-        Err(windows::Error::new(windows::HRESULT::from_thread(), "Error while running application"))
-    }
+    msg.wParam as isize
 }
-
-*/
