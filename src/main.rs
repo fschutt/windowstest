@@ -2748,6 +2748,131 @@ mod gl {
             }
         }
 
+        fn framebuffer_renderbuffer(
+            &self,
+            target: GLenum,
+            attachment: GLenum,
+            renderbuffertarget: GLenum,
+            renderbuffer: GLuint,
+        ) {
+            if self.glFramebufferRenderbuffer == ptr::null_mut() {
+                _gl_impl_panic("glFramebufferRenderbuffer");
+                return;
+            }
+
+            unsafe {
+                let func: extern "C" fn(GLenum, GLenum, GLenum, GLuint) = mem::transmute(self.glFramebufferRenderbuffer);
+                (func)( target, attachment, renderbuffertarget, renderbuffer)
+            }
+        }
+
+        fn renderbuffer_storage(
+            &self,
+            target: GLenum,
+            internalformat: GLenum,
+            width: GLsizei,
+            height: GLsizei,
+        ) {
+            if self.glRenderbufferStorage == ptr::null_mut() {
+                _gl_impl_panic("glRenderbufferStorage");
+                return;
+            }
+
+            unsafe {
+                let func: extern "C" fn(GLenum, GLenum, GLsizei, GLsizei) = mem::transmute(self.glRenderbufferStorage);
+                (func)(target, internalformat, width, height)
+            }
+        }
+        fn depth_func(&self, func: GLenum) {
+            if self.glDepthFunc == ptr::null_mut() {
+                _gl_impl_panic("glDepthFunc");
+                return;
+            }
+
+            unsafe {
+                let glDepthFunc: extern "C" fn(GLenum) = mem::transmute(self.glDepthFunc);
+                (glDepthFunc)(func)
+            }
+        }
+
+        fn active_texture(&self, texture: GLenum) {
+            if self.glActiveTexture == ptr::null_mut() {
+                _gl_impl_panic("glActiveTexture");
+                return;
+            }
+
+            unsafe {
+                let func: extern "C" fn(GLenum) = mem::transmute(self.glActiveTexture);
+                (func)(texture)
+            }
+        }
+
+        fn attach_shader(&self, program: GLuint, shader: GLuint) {
+            if self.glAttachShader == ptr::null_mut() {
+                _gl_impl_panic("glAttachShader");
+                return;
+            }
+
+            unsafe {
+                let func: extern "C" fn(GLuint, GLuint) = mem::transmute(self.glAttachShader);
+                (func)(program, shader)
+            }
+        }
+
+        fn bind_attrib_location(&self, program: GLuint, index: GLuint, name: &str) {
+
+            if self.glBindAttribLocation == ptr::null_mut() {
+                _gl_impl_panic("glBindAttribLocation");
+                return;
+            }
+
+            let cstr = encode_ascii(name);
+
+            unsafe {
+                let func: extern "C" fn(GLuint, GLuint, *const c_char) = mem::transmute(self.glBindAttribLocation);
+                (func)(program, index, cstr.as_ptr())
+            }
+        }
+
+        unsafe fn get_uniform_iv(&self, program: GLuint, location: GLint, result: &mut [GLint]) {
+            if self.glGetUniformiv == ptr::null_mut() {
+                _gl_impl_panic("glGetUniformiv");
+                return;
+            }
+
+            unsafe {
+                let func: extern "C" fn(GLuint, GLint, *mut GLint) = mem::transmute(self.glGetUniformiv);
+                (func)(program, location, result.as_mut_ptr())
+            }
+        }
+
+        unsafe fn get_uniform_fv(&self, program: GLuint, location: GLint, result: &mut [GLfloat]) {
+            if self.glGetUniformfv == ptr::null_mut() {
+                _gl_impl_panic("glGetUniformfv");
+                return;
+            }
+
+            unsafe {
+                let func: extern "C" fn(GLuint, GLint, *mut GLfloat) = mem::transmute(self.glGetUniformfv);
+                (func)(program, location, result.as_mut_ptr())
+            }
+        }
+
+        fn get_uniform_block_index(&self, program: GLuint, name: &str) -> GLuint {
+            if self.glGetUniformBlockIndex == ptr::null_mut() {
+                _gl_impl_panic("glGetUniformBlockIndex");
+                return 0;
+            }
+
+            let cstr = encode_ascii(name);
+
+            unsafe {
+                let func: extern "C" fn(GLuint, *const c_char) -> GLuint = mem::transmute(self.glGetUniformBlockIndex);
+                (func)(program, cstr.as_ptr())
+            }
+        }
+
+
     }
 
     fn _gl_impl_panic(s: &str) { println!("OpenGL function not loaded: {}", s); }
