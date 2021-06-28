@@ -2872,6 +2872,2745 @@ mod gl {
             }
         }
 
+        // ---------------------------------------------------------------------------------------------------------------------------
+        // ---------------------------------------------------------------------------------------------------------------------------
+        // ---------------------------------------------------------------------------------------------------------------------------
+        // ---------------------------------------------------------------------------------------------------------------------------
+
+        fn get_uniform_indices(&self, program: GLuint, names: &[&str]) -> Vec<GLuint> {
+
+            if self.glGetUniformIndices == ptr::null_mut() {
+                _gl_impl_panic("glGetUniformIndices");
+                return Vec::new;
+            }
+
+            let c_strings: Vec<CString> = names.iter().map(|n| encode_ascii(*n)).collect();
+            let pointers: Vec<*const GLchar> = c_strings.iter().map(|string| string.as_ptr()).collect();
+            let mut result = vec![0;c_strings.len()];
+            unsafe {
+                let func: extern "C" fn(GLuint, )
+                self.ffi_gl_.glGetUniformIndices(
+                    program,
+                    pointers.len() as GLsizei,
+                    pointers.as_ptr(),
+                    result.as_mut_ptr(),
+                );
+            }
+            result
+        }
+
+        fn bind_buffer_base(&self, target: GLenum, index: GLuint, buffer: GLuint) {
+
+            if self.glBindBufferBase == ptr::null_mut() {
+                _gl_impl_panic("glBindBufferBase");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBindBufferBase(target, index, buffer);
+            }
+        }
+
+        fn bind_buffer_range(
+            &self,
+            target: GLenum,
+            index: GLuint,
+            buffer: GLuint,
+            offset: GLintptr,
+            size: GLsizeiptr,
+        ) {
+
+            if self.glBindBufferRange == ptr::null_mut() {
+                _gl_impl_panic("glBindBufferRange");
+                return;
+            }
+
+            unsafe {
+                self._ffi_gl.glBindBufferRange(target, index, buffer, offset, size);
+            }
+        }
+
+        fn uniform_block_binding(
+            &self,
+            program: GLuint,
+            uniform_block_index: GLuint,
+            uniform_block_binding: GLuint,
+        ) {
+
+            if self.glUniformBlockBinding == ptr::null_mut() {
+                _gl_impl_panic("glUniformBlockBinding");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_
+                    .UniformBlockBinding(program, uniform_block_index, uniform_block_binding);
+            }
+        }
+
+        fn bind_buffer(&self, target: GLenum, buffer: GLuint) {
+
+            if self.glBindBuffer == ptr::null_mut() {
+                _gl_impl_panic("glBindBuffer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBindBuffer(target, buffer);
+            }
+        }
+
+        fn bind_vertex_array(&self, vao: GLuint) {
+
+            if self.glBindVertexArray == ptr::null_mut() {
+                _gl_impl_panic("glBindVertexArray");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBindVertexArray(vao);
+            }
+        }
+
+        fn bind_vertex_array_apple(&self, vao: GLuint) {
+
+            if self.glBindVertexArrayAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glBindVertexArrayAPPLE");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBindVertexArrayAPPLE(vao)
+            }
+        }
+
+        fn bind_renderbuffer(&self, target: GLenum, renderbuffer: GLuint) {
+
+            if self.glBindRenderbuffer == ptr::null_mut() {
+                _gl_impl_panic("glBindRenderbuffer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBindRenderbuffer(target, renderbuffer);
+            }
+        }
+
+        fn bind_framebuffer(&self, target: GLenum, framebuffer: GLuint) {
+
+            if self.glBindFramebuffer == ptr::null_mut() {
+                _gl_impl_panic("glBindFramebuffer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBindFramebuffer(target, framebuffer);
+            }
+        }
+
+        fn bind_texture(&self, target: GLenum, texture: GLuint) {
+
+            if self.glBindTexture == ptr::null_mut() {
+                _gl_impl_panic("glBindTexture");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBindTexture(target, texture);
+            }
+        }
+
+        fn draw_buffers(&self, bufs: &[GLenum]) {
+
+            if self.glDrawBuffers == ptr::null_mut() {
+                _gl_impl_panic("glDrawBuffers");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDrawBuffers(bufs.len() as GLsizei, bufs.as_ptr());
+            }
+        }
+
+        // FIXME: Does not verify buffer size -- unsafe!
+        fn tex_image_2d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            internal_format: GLint,
+            width: GLsizei,
+            height: GLsizei,
+            border: GLint,
+            format: GLenum,
+            ty: GLenum,
+            opt_data: Option<&[u8]>,
+        ) {
+            if self.glTexImage2D == ptr::null_mut() {
+                _gl_impl_panic("glTexImage2D");
+                return;
+            }
+
+            match opt_data {
+                Some(data) => unsafe {
+                    self.ffi_gl_.glTexImage2D(
+                        target,
+                        level,
+                        internal_format,
+                        width,
+                        height,
+                        border,
+                        format,
+                        ty,
+                        data.as_ptr() as *const GLvoid,
+                    );
+                },
+                None => unsafe {
+                    self.ffi_gl_.glTexImage2D(
+                        target,
+                        level,
+                        internal_format,
+                        width,
+                        height,
+                        border,
+                        format,
+                        ty,
+                        ptr::null(),
+                    );
+                },
+            }
+        }
+
+        fn compressed_tex_image_2d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            internal_format: GLenum,
+            width: GLsizei,
+            height: GLsizei,
+            border: GLint,
+            data: &[u8],
+        ) {
+
+            if self.glCompressedTexImage2D == ptr::null_mut() {
+                _gl_impl_panic("glCompressedTexImage2D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glCompressedTexImage2D(
+                    target,
+                    level,
+                    internal_format,
+                    width,
+                    height,
+                    border,
+                    data.len() as GLsizei,
+                    data.as_ptr() as *const GLvoid,
+                );
+            }
+        }
+
+        fn compressed_tex_sub_image_2d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            xoffset: GLint,
+            yoffset: GLint,
+            width: GLsizei,
+            height: GLsizei,
+            format: GLenum,
+            data: &[u8],
+        ) {
+            if self.glCompressedTexSubImage2D == ptr::null_mut() {
+                _gl_impl_panic("glCompressedTexSubImage2D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glCompressedTexSubImage2D(
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    width,
+                    height,
+                    format,
+                    data.len() as GLsizei,
+                    data.as_ptr() as *const GLvoid,
+                );
+            }
+        }
+
+        // FIXME: Does not verify buffer size -- unsafe!
+        fn tex_image_3d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            internal_format: GLint,
+            width: GLsizei,
+            height: GLsizei,
+            depth: GLsizei,
+            border: GLint,
+            format: GLenum,
+            ty: GLenum,
+            opt_data: Option<&[u8]>,
+        ) {
+            if self.glTexImage3D == ptr::null_mut() {
+                _gl_impl_panic("glTexImage3D");
+                return;
+            }
+
+            unsafe {
+                let pdata = match opt_data {
+                    Some(data) => mem::transmute(data.as_ptr()),
+                    None => ptr::null(),
+                };
+                self.ffi_gl_.glTexImage3D(
+                    target,
+                    level,
+                    internal_format,
+                    width,
+                    height,
+                    depth,
+                    border,
+                    format,
+                    ty,
+                    pdata,
+                );
+            }
+        }
+
+        fn copy_tex_image_2d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            internal_format: GLenum,
+            x: GLint,
+            y: GLint,
+            width: GLsizei,
+            height: GLsizei,
+            border: GLint,
+        ) {
+            if self.glCopyTexImage2D == ptr::null_mut() {
+                _gl_impl_panic("glCopyTexImage2D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glCopyTexImage2D(
+                    target,
+                    level,
+                    internal_format,
+                    x,
+                    y,
+                    width,
+                    height,
+                    border,
+                );
+            }
+        }
+
+        fn copy_tex_sub_image_2d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            xoffset: GLint,
+            yoffset: GLint,
+            x: GLint,
+            y: GLint,
+            width: GLsizei,
+            height: GLsizei,
+        ) {
+            if self.glCopyTexSubImage2D == ptr::null_mut() {
+                _gl_impl_panic("glCopyTexSubImage2D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glCopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
+            }
+        }
+
+        fn copy_tex_sub_image_3d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            xoffset: GLint,
+            yoffset: GLint,
+            zoffset: GLint,
+            x: GLint,
+            y: GLint,
+            width: GLsizei,
+            height: GLsizei,
+        ) {
+            if self.glCopyTexSubImage3D == ptr::null_mut() {
+                _gl_impl_panic("glCopyTexSubImage3D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glCopyTexSubImage3D(
+                    target, level, xoffset, yoffset, zoffset, x, y, width, height,
+                );
+            }
+        }
+
+        fn tex_sub_image_2d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            xoffset: GLint,
+            yoffset: GLint,
+            width: GLsizei,
+            height: GLsizei,
+            format: GLenum,
+            ty: GLenum,
+            data: &[u8],
+        ) {
+            if self.glTexSubImage2D == ptr::null_mut() {
+                _gl_impl_panic("glTexSubImage2D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTexSubImage2D(
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    width,
+                    height,
+                    format,
+                    ty,
+                    data.as_ptr() as *const c_void,
+                );
+            }
+        }
+
+        fn tex_sub_image_2d_pbo(
+            &self,
+            target: GLenum,
+            level: GLint,
+            xoffset: GLint,
+            yoffset: GLint,
+            width: GLsizei,
+            height: GLsizei,
+            format: GLenum,
+            ty: GLenum,
+            offset: usize,
+        ) {
+            if self.glTexSubImage2D == ptr::null_mut() {
+                _gl_impl_panic("glTexSubImage2D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTexSubImage2D(
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    width,
+                    height,
+                    format,
+                    ty,
+                    offset as *const c_void,
+                );
+            }
+        }
+
+        fn tex_sub_image_3d(
+            &self,
+            target: GLenum,
+            level: GLint,
+            xoffset: GLint,
+            yoffset: GLint,
+            zoffset: GLint,
+            width: GLsizei,
+            height: GLsizei,
+            depth: GLsizei,
+            format: GLenum,
+            ty: GLenum,
+            data: &[u8],
+        ) {
+            if self.glTexSubImage3D == ptr::null_mut() {
+                _gl_impl_panic("glTexSubImage3D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTexSubImage3D(
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    zoffset,
+                    width,
+                    height,
+                    depth,
+                    format,
+                    ty,
+                    data.as_ptr() as *const c_void,
+                );
+            }
+        }
+
+        fn tex_sub_image_3d_pbo(
+            &self,
+            target: GLenum,
+            level: GLint,
+            xoffset: GLint,
+            yoffset: GLint,
+            zoffset: GLint,
+            width: GLsizei,
+            height: GLsizei,
+            depth: GLsizei,
+            format: GLenum,
+            ty: GLenum,
+            offset: usize,
+        ) {
+            if self.glTexSubImage3D == ptr::null_mut() {
+                _gl_impl_panic("glTexSubImage3D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTexSubImage3D(
+                    target,
+                    level,
+                    xoffset,
+                    yoffset,
+                    zoffset,
+                    width,
+                    height,
+                    depth,
+                    format,
+                    ty,
+                    offset as *const c_void,
+                );
+            }
+        }
+
+        fn tex_storage_2d(
+            &self,
+            target: GLenum,
+            levels: GLint,
+            internal_format: GLenum,
+            width: GLsizei,
+            height: GLsizei,
+        ) {
+            if self.glTexStorage2D == ptr::null_mut() {
+                _gl_impl_panic("glTexStorage2D");
+                return;
+            }
+
+            if self.ffi_gl_.glTexStorage2D.is_loaded() {
+                unsafe {
+                    self.ffi_gl_
+                        .TexStorage2D(target, levels, internal_format, width, height);
+                }
+            }
+        }
+
+        fn tex_storage_3d(
+            &self,
+            target: GLenum,
+            levels: GLint,
+            internal_format: GLenum,
+            width: GLsizei,
+            height: GLsizei,
+            depth: GLsizei,
+        ) {
+            if self.glTexStorage3D == ptr::null_mut() {
+                _gl_impl_panic("glTexStorage3D");
+                return;
+            }
+
+            if self.ffi_gl_.glTexStorage3D.is_loaded() {
+                unsafe {
+                    self.ffi_gl_
+                        .TexStorage3D(target, levels, internal_format, width, height, depth);
+                }
+            }
+        }
+
+        fn get_tex_image_into_buffer(
+            &self,
+            target: GLenum,
+            level: GLint,
+            format: GLenum,
+            ty: GLenum,
+            output: &mut [u8],
+        ) {
+            if self.glGetTexImage == ptr::null_mut() {
+                _gl_impl_panic("glGetTexImage");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glGetTexImage(target, level, format, ty, output.as_mut_ptr() as *mut _);
+            }
+        }
+
+        unsafe fn copy_image_sub_data(
+            &self,
+            src_name: GLuint,
+            src_target: GLenum,
+            src_level: GLint,
+            src_x: GLint,
+            src_y: GLint,
+            src_z: GLint,
+            dst_name: GLuint,
+            dst_target: GLenum,
+            dst_level: GLint,
+            dst_x: GLint,
+            dst_y: GLint,
+            dst_z: GLint,
+            src_width: GLsizei,
+            src_height: GLsizei,
+            src_depth: GLsizei,
+        ) {
+            if self.glCopyImageSubData == ptr::null_mut() {
+                _gl_impl_panic("glCopyImageSubData");
+                return;
+            }
+
+            self.ffi_gl_.glCopyImageSubData(
+                src_name, src_target, src_level, src_x, src_y, src_z, dst_name, dst_target, dst_level,
+                dst_x, dst_y, dst_z, src_width, src_height, src_depth,
+            );
+        }
+
+        fn invalidate_framebuffer(&self, target: GLenum, attachments: &[GLenum]) {
+
+            if self.glInvalidateFramebuffer == ptr::null_mut() {
+                _gl_impl_panic("glInvalidateFramebuffer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glInvalidateFramebuffer(
+                    target,
+                    attachments.len() as GLsizei,
+                    attachments.as_ptr(),
+                );
+            }
+        }
+
+        fn invalidate_sub_framebuffer(
+            &self,
+            target: GLenum,
+            attachments: &[GLenum],
+            xoffset: GLint,
+            yoffset: GLint,
+            width: GLsizei,
+            height: GLsizei,
+        ) {
+
+            if self.glInvalidateSubFramebuffer == ptr::null_mut() {
+                _gl_impl_panic("glInvalidateSubFramebuffer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glInvalidateSubFramebuffer(
+                    target,
+                    attachments.len() as GLsizei,
+                    attachments.as_ptr(),
+                    xoffset,
+                    yoffset,
+                    width,
+                    height,
+                );
+            }
+        }
+
+        unsafe fn get_integer_v(&self, name: GLenum, result: &mut [GLint]) {
+            if self.glGetIntegerv == ptr::null_mut() {
+                _gl_impl_panic("glGetIntegerv");
+                return;
+            }
+            self.ffi_gl_.glGetIntegerv(name, result.as_mut_ptr());
+        }
+
+        unsafe fn get_integer_64v(&self, name: GLenum, result: &mut [GLint64]) {
+            if self.glGetInteger64v == ptr::null_mut() {
+                _gl_impl_panic("glGetInteger64v");
+                return;
+            }
+            self.ffi_gl_.glGetInteger64v(name, result.as_mut_ptr());
+        }
+
+        unsafe fn get_integer_iv(&self, name: GLenum, index: GLuint, result: &mut [GLint]) {
+            if self.glGetIntegeri_v == ptr::null_mut() {
+                _gl_impl_panic("glGetIntegeri_v");
+                return;
+            }
+            self.ffi_gl_.glGetIntegeri_v(name, index, result.as_mut_ptr());
+        }
+
+        #[inline]
+        unsafe fn get_integer_64iv(&self, name: GLenum, index: GLuint, result: &mut [GLint64]) {
+            if self.GetInteger64i_v == ptr::null_mut() {
+                _gl_impl_panic("GetInteger64i_v");
+                return;
+            }
+            self.ffi_gl_.GetInteger64i_v(name, index, result.as_mut_ptr());
+        }
+
+        #[inline]
+        unsafe fn get_boolean_v(&self, name: GLenum, result: &mut [GLboolean]) {
+            if self.glGetBooleanv == ptr::null_mut() {
+                _gl_impl_panic("glGetBooleanv");
+                return;
+            }
+            self.ffi_gl_.glGetBooleanv(name, result.as_mut_ptr());
+        }
+
+        #[inline]
+        unsafe fn get_float_v(&self, name: GLenum, result: &mut [GLfloat]) {
+            if self.glGetFloatv == ptr::null_mut() {
+                _gl_impl_panic("glGetFloatv");
+                return;
+            }
+            self.ffi_gl_.glGetFloatv(name, result.as_mut_ptr());
+        }
+
+        fn get_framebuffer_attachment_parameter_iv(
+            &self,
+            target: GLenum,
+            attachment: GLenum,
+            pname: GLenum,
+        ) -> GLint {
+            if self.glGetFramebufferAttachmentParameteriv == ptr::null_mut() {
+                _gl_impl_panic("glGetFramebufferAttachmentParameteriv");
+                return 0;
+            }
+            let mut result: GLint = 0;
+            unsafe {
+                self.ffi_gl_.glGetFramebufferAttachmentParameteriv(
+                    target,
+                    attachment,
+                    pname,
+                    &mut result,
+                );
+            }
+            result
+        }
+
+        fn get_renderbuffer_parameter_iv(&self, target: GLenum, pname: GLenum) -> GLint {
+            if self.glGetRenderbufferParameteriv == ptr::null_mut() {
+                _gl_impl_panic("glGetRenderbufferParameteriv");
+                return 0;
+            }
+
+            let mut result: GLint = 0;
+            unsafe {
+                self.ffi_gl_.glGetRenderbufferParameteriv(target, pname, &mut result);
+            }
+            result
+        }
+
+        fn get_tex_parameter_iv(&self, target: GLenum, pname: GLenum) -> GLint {
+
+            if self.glGetTexParameteriv == ptr::null_mut() {
+                _gl_impl_panic("glGetTexParameteriv");
+                return 0;
+            }
+
+            let mut result: GLint = 0;
+            unsafe {
+                self.ffi_gl_.glGetTexParameteriv(target, pname, &mut result);
+            }
+            result
+        }
+
+        fn get_tex_parameter_fv(&self, target: GLenum, pname: GLenum) -> GLfloat {
+
+            if self.glGetTexParameterfv == ptr::null_mut() {
+                _gl_impl_panic("glGetTexParameterfv");
+                return 0.0;
+            }
+
+            let mut result: GLfloat = 0.0;
+            unsafe {
+                self.ffi_gl_.glGetTexParameterfv(target, pname, &mut result);
+            }
+            result
+        }
+
+        fn tex_parameter_i(&self, target: GLenum, pname: GLenum, param: GLint) {
+
+            if self.glTexParameteri == ptr::null_mut() {
+                _gl_impl_panic("glTexParameteri");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTexParameteri(target, pname, param);
+            }
+        }
+
+        fn tex_parameter_f(&self, target: GLenum, pname: GLenum, param: GLfloat) {
+
+            if self.glTexParameterf == ptr::null_mut() {
+                _gl_impl_panic("glTexParameterf");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTexParameterf(target, pname, param);
+            }
+        }
+
+        fn framebuffer_texture_2d(
+            &self,
+            target: GLenum,
+            attachment: GLenum,
+            textarget: GLenum,
+            texture: GLuint,
+            level: GLint,
+        ) {
+
+            if self.glFramebufferTexture2D == ptr::null_mut() {
+                _gl_impl_panic("glFramebufferTexture2D");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glFramebufferTexture2D(target, attachment, textarget, texture, level);
+            }
+        }
+
+        fn framebuffer_texture_layer(
+            &self,
+            target: GLenum,
+            attachment: GLenum,
+            texture: GLuint,
+            level: GLint,
+            layer: GLint,
+        ) {
+            if self.glFramebufferTextureLayer == ptr::null_mut() {
+                _gl_impl_panic("glFramebufferTextureLayer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glFramebufferTextureLayer(target, attachment, texture, level, layer);
+            }
+        }
+
+        fn blit_framebuffer(
+            &self,
+            src_x0: GLint,
+            src_y0: GLint,
+            src_x1: GLint,
+            src_y1: GLint,
+            dst_x0: GLint,
+            dst_y0: GLint,
+            dst_x1: GLint,
+            dst_y1: GLint,
+            mask: GLbitfield,
+            filter: GLenum,
+        ) {
+            if self.glBlitFramebuffer == ptr::null_mut() {
+                _gl_impl_panic("glBlitFramebuffer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBlitFramebuffer(
+                    src_x0, src_y0, src_x1, src_y1, dst_x0, dst_y0, dst_x1, dst_y1, mask, filter,
+                );
+            }
+        }
+
+        fn vertex_attrib_4f(&self, index: GLuint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat) {
+            if self.glVertexAttrib4f == ptr::null_mut() {
+                _gl_impl_panic("glVertexAttrib4f");
+                return;
+            }
+            unsafe { self.ffi_gl_.glVertexAttrib4f(index, x, y, z, w) }
+        }
+
+        fn vertex_attrib_pointer_f32(
+            &self,
+            index: GLuint,
+            size: GLint,
+            normalized: bool,
+            stride: GLsizei,
+            offset: GLuint,
+        ) {
+            if self.glVertexAttribPointer == ptr::null_mut() {
+                _gl_impl_panic("glVertexAttribPointer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glVertexAttribPointer(
+                    index,
+                    size,
+                    ffi::FLOAT,
+                    normalized as GLboolean,
+                    stride,
+                    offset as *const GLvoid,
+                )
+            }
+        }
+
+        fn vertex_attrib_pointer(
+            &self,
+            index: GLuint,
+            size: GLint,
+            type_: GLenum,
+            normalized: bool,
+            stride: GLsizei,
+            offset: GLuint,
+        ) {
+            if self.glVertexAttribPointer == ptr::null_mut() {
+                _gl_impl_panic("glVertexAttribPointer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glVertexAttribPointer(
+                    index,
+                    size,
+                    type_,
+                    normalized as GLboolean,
+                    stride,
+                    offset as *const GLvoid,
+                )
+            }
+        }
+
+        fn vertex_attrib_i_pointer(
+            &self,
+            index: GLuint,
+            size: GLint,
+            type_: GLenum,
+            stride: GLsizei,
+            offset: GLuint,
+        ) {
+            if self.glVertexAttribIPointer == ptr::null_mut() {
+                _gl_impl_panic("glVertexAttribIPointer");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glVertexAttribIPointer(index, size, type_, stride, offset as *const GLvoid)
+            }
+        }
+
+        fn vertex_attrib_divisor(&self, index: GLuint, divisor: GLuint) {
+
+            if self.glVertexAttribDivisor == ptr::null_mut() {
+                _gl_impl_panic("glVertexAttribDivisor");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glVertexAttribDivisor(index, divisor) }
+        }
+
+        fn viewport(&self, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
+
+            if self.glViewport == ptr::null_mut() {
+                _gl_impl_panic("glViewport");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glViewport(x, y, width, height);
+            }
+        }
+
+        fn scissor(&self, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
+
+            if self.glScissor == ptr::null_mut() {
+                _gl_impl_panic("glScissor");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glScissor(x, y, width, height);
+            }
+        }
+
+        fn line_width(&self, width: GLfloat) {
+
+            if self.glLineWidth == ptr::null_mut() {
+                _gl_impl_panic("glLineWidth");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glLineWidth(width);
+            }
+        }
+
+        fn use_program(&self, program: GLuint) {
+
+            if self.glUseProgram == ptr::null_mut() {
+                _gl_impl_panic("glUseProgram");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUseProgram(program);
+            }
+        }
+
+        fn validate_program(&self, program: GLuint) {
+
+            if self.glValidateProgram == ptr::null_mut() {
+                _gl_impl_panic("glValidateProgram");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glValidateProgram(program);
+            }
+        }
+
+        fn draw_arrays(&self, mode: GLenum, first: GLint, count: GLsizei) {
+
+            if self.glDrawArrays == ptr::null_mut() {
+                _gl_impl_panic("glDrawArrays");
+                return;
+            }
+
+            unsafe {
+                return self.ffi_gl_.glDrawArrays(mode, first, count);
+            }
+        }
+
+        fn draw_arrays_instanced(
+            &self,
+            mode: GLenum,
+            first: GLint,
+            count: GLsizei,
+            primcount: GLsizei,
+        ) {
+
+            if self.glDrawArraysInstanced == ptr::null_mut() {
+                _gl_impl_panic("glDrawArraysInstanced");
+                return;
+            }
+
+            unsafe {
+                return self.ffi_gl_.glDrawArraysInstanced(mode, first, count, primcount);
+            }
+        }
+
+        fn draw_elements(
+            &self,
+            mode: GLenum,
+            count: GLsizei,
+            element_type: GLenum,
+            indices_offset: GLuint,
+        ) {
+            if self.glDrawElements == ptr::null_mut() {
+                _gl_impl_panic("glDrawElements");
+                return;
+            }
+
+            unsafe {
+                return self.ffi_gl_.glDrawElements(
+                    mode,
+                    count,
+                    element_type,
+                    indices_offset as *const c_void,
+                );
+            }
+        }
+
+        fn draw_elements_instanced(
+            &self,
+            mode: GLenum,
+            count: GLsizei,
+            element_type: GLenum,
+            indices_offset: GLuint,
+            primcount: GLsizei,
+        ) {
+            if self.glDrawElementsInstanced == ptr::null_mut() {
+                _gl_impl_panic("glDrawElementsInstanced");
+                return;
+            }
+
+            unsafe {
+                return self.ffi_gl_.glDrawElementsInstanced(
+                    mode,
+                    count,
+                    element_type,
+                    indices_offset as *const c_void,
+                    primcount,
+                );
+            }
+        }
+
+        fn blend_color(&self, r: f32, g: f32, b: f32, a: f32) {
+
+            if self.glBlendColor == ptr::null_mut() {
+                _gl_impl_panic("glBlendColor");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBlendColor(r, g, b, a);
+            }
+        }
+
+        fn blend_func(&self, sfactor: GLenum, dfactor: GLenum) {
+
+            if self.glBlendFunc == ptr::null_mut() {
+                _gl_impl_panic("glBlendFunc");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBlendFunc(sfactor, dfactor);
+            }
+        }
+
+        fn blend_func_separate(
+            &self,
+            src_rgb: GLenum,
+            dest_rgb: GLenum,
+            src_alpha: GLenum,
+            dest_alpha: GLenum,
+        ) {
+            if self.glBlendFuncSeparate == ptr::null_mut() {
+                _gl_impl_panic("glBlendFuncSeparate");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBlendFuncSeparate(src_rgb, dest_rgb, src_alpha, dest_alpha);
+            }
+        }
+
+        fn blend_equation(&self, mode: GLenum) {
+
+            if self.glBlendEquation == ptr::null_mut() {
+                _gl_impl_panic("glBlendEquation");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBlendEquation(mode);
+            }
+        }
+
+        fn blend_equation_separate(&self, mode_rgb: GLenum, mode_alpha: GLenum) {
+
+            if self.glBlendEquationSeparate == ptr::null_mut() {
+                _gl_impl_panic("glBlendEquationSeparate");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBlendEquationSeparate(mode_rgb, mode_alpha);
+            }
+        }
+
+        fn color_mask(&self, r: bool, g: bool, b: bool, a: bool) {
+
+            if self.glColorMask == ptr::null_mut() {
+                _gl_impl_panic("glColorMask");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glColorMask(
+                    r as GLboolean,
+                    g as GLboolean,
+                    b as GLboolean,
+                    a as GLboolean,
+                );
+            }
+        }
+
+        fn cull_face(&self, mode: GLenum) {
+
+            if self.glCullFace == ptr::null_mut() {
+                _gl_impl_panic("glCullFace");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glCullFace(mode);
+            }
+        }
+
+        fn front_face(&self, mode: GLenum) {
+
+            if self.glFrontFace == ptr::null_mut() {
+                _gl_impl_panic("glFrontFace");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glFrontFace(mode);
+            }
+        }
+
+        fn enable(&self, cap: GLenum) {
+
+            if self.glEnable == ptr::null_mut() {
+                _gl_impl_panic("glEnable");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glEnable(cap);
+            }
+        }
+
+        fn disable(&self, cap: GLenum) {
+
+            if self.glDisable == ptr::null_mut() {
+                _gl_impl_panic("glDisable");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDisable(cap);
+            }
+        }
+
+        fn hint(&self, param_name: GLenum, param_val: GLenum) {
+
+            if self.glHint == ptr::null_mut() {
+                _gl_impl_panic("glHint");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glHint(param_name, param_val);
+            }
+        }
+
+        fn is_enabled(&self, cap: GLenum) -> GLboolean {
+
+            if self.glIsEnabled == ptr::null_mut() {
+                _gl_impl_panic("glIsEnabled");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glIsEnabled(cap) }
+        }
+
+        fn is_shader(&self, shader: GLuint) -> GLboolean {
+
+            if self.glIsShader == ptr::null_mut() {
+                _gl_impl_panic("glIsShader");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glIsShader(shader) }
+        }
+
+        fn is_texture(&self, texture: GLenum) -> GLboolean {
+
+            if self.glIsTexture == ptr::null_mut() {
+                _gl_impl_panic("glIsTexture");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glIsTexture(texture) }
+        }
+
+        fn is_framebuffer(&self, framebuffer: GLenum) -> GLboolean {
+
+            if self.glIsFramebuffer == ptr::null_mut() {
+                _gl_impl_panic("glIsFramebuffer");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glIsFramebuffer(framebuffer) }
+        }
+
+        fn is_renderbuffer(&self, renderbuffer: GLenum) -> GLboolean {
+
+            if self.glIsRenderbuffer == ptr::null_mut() {
+                _gl_impl_panic("glIsRenderbuffer");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glIsRenderbuffer(renderbuffer) }
+        }
+
+        fn check_frame_buffer_status(&self, target: GLenum) -> GLenum {
+
+            if self.glCheckFramebufferStatus == ptr::null_mut() {
+                _gl_impl_panic("glCheckFramebufferStatus");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glCheckFramebufferStatus(target) }
+        }
+
+        fn enable_vertex_attrib_array(&self, index: GLuint) {
+
+            if self.glEnableVertexAttribArray == ptr::null_mut() {
+                _gl_impl_panic("glEnableVertexAttribArray");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glEnableVertexAttribArray(index);
+            }
+        }
+
+        fn disable_vertex_attrib_array(&self, index: GLuint) {
+
+            if self.glDisableVertexAttribArray == ptr::null_mut() {
+                _gl_impl_panic("glDisableVertexAttribArray");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDisableVertexAttribArray(index);
+            }
+        }
+
+        fn uniform_1f(&self, location: GLint, v0: GLfloat) {
+
+            if self.glUniform1f == ptr::null_mut() {
+                _gl_impl_panic("glUniform1f");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform1f(location, v0);
+            }
+        }
+
+        fn uniform_1fv(&self, location: GLint, values: &[f32]) {
+
+            if self.glUniform1fv == ptr::null_mut() {
+                _gl_impl_panic("glUniform1fv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform1fv(location, values.len() as GLsizei, values.as_ptr());
+            }
+        }
+
+        fn uniform_1i(&self, location: GLint, v0: GLint) {
+
+            if self.glUniform1i == ptr::null_mut() {
+                _gl_impl_panic("glUniform1i");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform1i(location, v0);
+            }
+        }
+
+        fn uniform_1iv(&self, location: GLint, values: &[i32]) {
+
+            if self.glUniform1iv == ptr::null_mut() {
+                _gl_impl_panic("glUniform1iv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform1iv(location, values.len() as GLsizei, values.as_ptr());
+            }
+        }
+
+        fn uniform_1ui(&self, location: GLint, v0: GLuint) {
+
+            if self.glUniform1ui == ptr::null_mut() {
+                _gl_impl_panic("glUniform1ui");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform1ui(location, v0);
+            }
+        }
+
+        fn uniform_2f(&self, location: GLint, v0: GLfloat, v1: GLfloat) {
+
+            if self.glUniform2f == ptr::null_mut() {
+                _gl_impl_panic("glUniform2f");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform2f(location, v0, v1);
+            }
+        }
+
+        fn uniform_2fv(&self, location: GLint, values: &[f32]) {
+
+            if self.glUniform2fv == ptr::null_mut() {
+                _gl_impl_panic("glUniform2fv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform2fv(location, (values.len() / 2) as GLsizei, values.as_ptr());
+            }
+        }
+
+        fn uniform_2i(&self, location: GLint, v0: GLint, v1: GLint) {
+
+            if self.glUniform2i == ptr::null_mut() {
+                _gl_impl_panic("glUniform2i");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform2i(location, v0, v1);
+            }
+        }
+
+        fn uniform_2iv(&self, location: GLint, values: &[i32]) {
+
+            if self.glUniform2iv == ptr::null_mut() {
+                _gl_impl_panic("glUniform2iv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform2iv(location, (values.len() / 2) as GLsizei, values.as_ptr());
+            }
+        }
+
+        fn uniform_2ui(&self, location: GLint, v0: GLuint, v1: GLuint) {
+
+            if self.glUniform2ui == ptr::null_mut() {
+                _gl_impl_panic("glUniform2ui");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform2ui(location, v0, v1);
+            }
+        }
+
+        fn uniform_3f(&self, location: GLint, v0: GLfloat, v1: GLfloat, v2: GLfloat) {
+
+            if self.glUniform3f == ptr::null_mut() {
+                _gl_impl_panic("glUniform3f");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform3f(location, v0, v1, v2);
+            }
+        }
+
+        fn uniform_3fv(&self, location: GLint, values: &[f32]) {
+
+            if self.glUniform3fv == ptr::null_mut() {
+                _gl_impl_panic("glUniform3fv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform3fv(location, (values.len() / 3) as GLsizei, values.as_ptr());
+            }
+        }
+
+        fn uniform_3i(&self, location: GLint, v0: GLint, v1: GLint, v2: GLint) {
+
+            if self.glUniform3i == ptr::null_mut() {
+                _gl_impl_panic("glUniform3i");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform3i(location, v0, v1, v2);
+            }
+        }
+
+        fn uniform_3iv(&self, location: GLint, values: &[i32]) {
+
+            if self.glUniform3iv == ptr::null_mut() {
+                _gl_impl_panic("glUniform3iv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform3iv(location, (values.len() / 3) as GLsizei, values.as_ptr());
+            }
+        }
+
+        fn uniform_3ui(&self, location: GLint, v0: GLuint, v1: GLuint, v2: GLuint) {
+
+            if self.glUniform3ui == ptr::null_mut() {
+                _gl_impl_panic("glUniform3ui");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform3ui(location, v0, v1, v2);
+            }
+        }
+
+        fn uniform_4f(&self, location: GLint, x: GLfloat, y: GLfloat, z: GLfloat, w: GLfloat) {
+
+            if self.glUniform4f == ptr::null_mut() {
+                _gl_impl_panic("glUniform4f");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform4f(location, x, y, z, w);
+            }
+        }
+
+        fn uniform_4i(&self, location: GLint, x: GLint, y: GLint, z: GLint, w: GLint) {
+
+            if self.glUniform4i == ptr::null_mut() {
+                _gl_impl_panic("glUniform4i");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform4i(location, x, y, z, w);
+            }
+        }
+
+        fn uniform_4iv(&self, location: GLint, values: &[i32]) {
+
+            if self.glUniform4iv == ptr::null_mut() {
+                _gl_impl_panic("glUniform4iv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform4iv(location, (values.len() / 4) as GLsizei, values.as_ptr());
+            }
+        }
+
+        fn uniform_4ui(&self, location: GLint, x: GLuint, y: GLuint, z: GLuint, w: GLuint) {
+
+            if self.glUniform4ui == ptr::null_mut() {
+                _gl_impl_panic("glUniform4ui");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform4ui(location, x, y, z, w);
+            }
+        }
+
+        fn uniform_4fv(&self, location: GLint, values: &[f32]) {
+
+            if self.glUniform4fv == ptr::null_mut() {
+                _gl_impl_panic("glUniform4fv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniform4fv(location, (values.len() / 4) as GLsizei, values.as_ptr());
+            }
+        }
+
+        fn uniform_matrix_2fv(&self, location: GLint, transpose: bool, value: &[f32]) {
+
+            if self.glUniformMatrix2fv == ptr::null_mut() {
+                _gl_impl_panic("glUniformMatrix2fv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniformMatrix2fv(
+                    location,
+                    (value.len() / 4) as GLsizei,
+                    transpose as GLboolean,
+                    value.as_ptr(),
+                );
+            }
+        }
+
+        fn uniform_matrix_3fv(&self, location: GLint, transpose: bool, value: &[f32]) {
+
+            if self.glUniformMatrix3fv == ptr::null_mut() {
+                _gl_impl_panic("glUniformMatrix3fv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniformMatrix3fv(
+                    location,
+                    (value.len() / 9) as GLsizei,
+                    transpose as GLboolean,
+                    value.as_ptr(),
+                );
+            }
+        }
+
+        fn uniform_matrix_4fv(&self, location: GLint, transpose: bool, value: &[f32]) {
+
+            if self.glUniformMatrix4fv == ptr::null_mut() {
+                _gl_impl_panic("glUniformMatrix4fv");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glUniformMatrix4fv(
+                    location,
+                    (value.len() / 16) as GLsizei,
+                    transpose as GLboolean,
+                    value.as_ptr(),
+                );
+            }
+        }
+
+        fn depth_mask(&self, flag: bool) {
+
+            if self.glDepthMask == ptr::null_mut() {
+                _gl_impl_panic("glDepthMask");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDepthMask(flag as GLboolean);
+            }
+        }
+
+        fn depth_range(&self, near: f64, far: f64) {
+
+            if self.glDepthRange == ptr::null_mut() {
+                _gl_impl_panic("glDepthRange");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDepthRange(near as GLclampd, far as GLclampd);
+            }
+        }
+
+        fn get_active_attrib(&self, program: GLuint, index: GLuint) -> (i32, u32, String) {
+
+            if self.glGetActiveAttrib == ptr::null_mut() {
+                _gl_impl_panic("glGetActiveAttrib");
+                return (0, 0, String::new());
+            }
+
+            let mut buf_size = [0];
+            unsafe {
+                self.get_program_iv(program, ffi::ACTIVE_ATTRIBUTE_MAX_LENGTH, &mut buf_size);
+            }
+            let mut name = vec![0u8; buf_size[0] as usize];
+            let mut length = 0 as GLsizei;
+            let mut size = 0 as i32;
+            let mut type_ = 0 as u32;
+            unsafe {
+                self.ffi_gl_.glGetActiveAttrib(
+                    program,
+                    index,
+                    buf_size[0],
+                    &mut length,
+                    &mut size,
+                    &mut type_,
+                    name.as_mut_ptr() as *mut GLchar,
+                );
+            }
+            name.truncate(if length > 0 { length as usize } else { 0 });
+            (size, type_, String::from_utf8(name).unwrap())
+        }
+
+        fn get_active_uniform(&self, program: GLuint, index: GLuint) -> (i32, u32, String) {
+
+            if self.glGetActiveUniform == ptr::null_mut() {
+                _gl_impl_panic("glGetActiveUniform");
+                return (0, 0, String::new());
+            }
+
+            let mut buf_size = [0];
+            unsafe {
+                self.get_program_iv(program, ffi::ACTIVE_UNIFORM_MAX_LENGTH, &mut buf_size);
+            }
+            let mut name = vec![0 as u8; buf_size[0] as usize];
+            let mut length: GLsizei = 0;
+            let mut size: i32 = 0;
+            let mut type_: u32 = 0;
+
+            unsafe {
+                self.ffi_gl_.glGetActiveUniform(
+                    program,
+                    index,
+                    buf_size[0],
+                    &mut length,
+                    &mut size,
+                    &mut type_,
+                    name.as_mut_ptr() as *mut GLchar,
+                );
+            }
+
+            name.truncate(if length > 0 { length as usize } else { 0 });
+
+            (size, type_, String::from_utf8(name).unwrap())
+        }
+
+        fn get_active_uniforms_iv(
+            &self,
+            program: GLuint,
+            indices: Vec<GLuint>,
+            pname: GLenum,
+        ) -> Vec<GLint> {
+
+            if self.glGetActiveUniformsiv == ptr::null_mut() {
+                _gl_impl_panic("glGetActiveUniformsiv");
+                return Vec::new();
+            }
+
+            let mut result = Vec::with_capacity(indices.len());
+            unsafe {
+                result.set_len(indices.len());
+                self.ffi_gl_.glGetActiveUniformsiv(
+                    program,
+                    indices.len() as GLsizei,
+                    indices.as_ptr(),
+                    pname,
+                    result.as_mut_ptr(),
+                );
+            }
+            result
+        }
+
+        fn get_active_uniform_block_i(&self, program: GLuint, index: GLuint, pname: GLenum) -> GLint {
+
+            if self.glGetActiveUniformBlockiv == ptr::null_mut() {
+                _gl_impl_panic("glGetActiveUniformBlockiv");
+                return 0;
+            }
+
+            let mut result = 0;
+            unsafe {
+                self.ffi_gl_.glGetActiveUniformBlockiv(program, index, pname, &mut result);
+            }
+            result
+        }
+
+        fn get_active_uniform_block_iv(
+            &self,
+            program: GLuint,
+            index: GLuint,
+            pname: GLenum,
+        ) -> Vec<GLint> {
+
+            if self.glGetActiveUniformBlockiv == ptr::null_mut() {
+                _gl_impl_panic("glGetActiveUniformBlockiv");
+                return Vec::new();
+            }
+
+            let count = self.get_active_uniform_block_i(program, index, ffi::UNIFORM_BLOCK_ACTIVE_UNIFORMS);
+            let mut result = Vec::with_capacity(count as usize);
+            unsafe {
+                result.set_len(count as usize);
+                self.ffi_gl_.glGetActiveUniformBlockiv(program, index, pname, result.as_mut_ptr());
+            }
+            result
+        }
+
+        fn get_active_uniform_block_name(&self, program: GLuint, index: GLuint) -> String {
+
+            if self.glGetActiveUniformBlockName == ptr::null_mut() {
+                _gl_impl_panic("glGetActiveUniformBlockName");
+                return String::new();
+            }
+
+            let buf_size = self.get_active_uniform_block_i(program, index, ffi::UNIFORM_BLOCK_NAME_LENGTH);
+            let mut name = vec![0 as u8; buf_size as usize];
+            let mut length: GLsizei = 0;
+            unsafe {
+                self.ffi_gl_.glGetActiveUniformBlockName(
+                    program,
+                    index,
+                    buf_size,
+                    &mut length,
+                    name.as_mut_ptr() as *mut GLchar,
+                );
+            }
+            name.truncate(if length > 0 { length as usize } else { 0 });
+
+            String::from_utf8(name).unwrap()
+        }
+
+        fn get_attrib_location(&self, program: GLuint, name: &str) -> c_int {
+
+            if self.glGetAttribLocation == ptr::null_mut() {
+                _gl_impl_panic("glGetAttribLocation");
+                return 0;
+            }
+
+            let name = encode_ascii(name);
+            unsafe { self.ffi_gl_.glGetAttribLocation(program, name.as_ptr()) }
+        }
+
+        fn get_frag_data_location(&self, program: GLuint, name: &str) -> c_int {
+
+            if self.glGetFragDataLocation == ptr::null_mut() {
+                _gl_impl_panic("glGetFragDataLocation");
+                return 0;
+            }
+
+            let name = encode_ascii(name);
+            unsafe { self.ffi_gl_.glGetFragDataLocation(program, name.as_ptr()) }
+        }
+
+        fn get_uniform_location(&self, program: GLuint, name: &str) -> c_int {
+
+            if self.glGetUniformLocation == ptr::null_mut() {
+                _gl_impl_panic("glGetUniformLocation");
+                return 0;
+            }
+
+            let name = encode_ascii(name);
+            unsafe { self.ffi_gl_.glGetUniformLocation(program, name.as_ptr()) }
+        }
+
+        fn get_program_info_log(&self, program: GLuint) -> String {
+
+            if self.glGetProgramInfoLog == ptr::null_mut() {
+                _gl_impl_panic("glGetProgramInfoLog");
+                return String::new();
+            }
+
+            let mut max_len = [0];
+            unsafe {
+                self.get_program_iv(program, ffi::INFO_LOG_LENGTH, &mut max_len);
+            }
+            if max_len[0] == 0 {
+                return String::new();
+            }
+            let mut result = vec![0u8; max_len[0] as usize];
+            let mut result_len = 0 as GLsizei;
+            unsafe {
+                self.ffi_gl_.glGetProgramInfoLog(
+                    program,
+                    max_len[0] as GLsizei,
+                    &mut result_len,
+                    result.as_mut_ptr() as *mut GLchar,
+                );
+            }
+            result.truncate(if result_len > 0 {
+                result_len as usize
+            } else {
+                0
+            });
+            String::from_utf8(result).unwrap()
+        }
+
+        #[inline]
+        unsafe fn get_program_iv(&self, program: GLuint, pname: GLenum, result: &mut [GLint]) {
+            if self.glGetProgramiv == ptr::null_mut() {
+                _gl_impl_panic("glGetProgramiv");
+                return;
+            }
+            self.ffi_gl_.glGetProgramiv(program, pname, result.as_mut_ptr());
+        }
+
+        fn get_program_binary(&self, program: GLuint) -> (Vec<u8>, GLenum) {
+
+            const NONE: GLenum = 0;
+
+            if self.glGetProgramBinary == ptr::null_mut() {
+                _gl_impl_panic("glGetProgramBinary");
+                return (Vec::new(), NONE);
+            }
+
+            let mut len = [0];
+            unsafe {
+                self.get_program_iv(program, ffi::PROGRAM_BINARY_LENGTH, &mut len);
+            }
+            if len[0] <= 0 {
+                return (Vec::new(), NONE);
+            }
+            let mut binary: Vec<u8> = Vec::with_capacity(len[0] as usize);
+            let mut format = NONE;
+            let mut out_len = 0;
+            unsafe {
+                binary.set_len(len[0] as usize);
+                self.ffi_gl_.glGetProgramBinary(
+                    program,
+                    len[0],
+                    &mut out_len as *mut GLsizei,
+                    &mut format,
+                    binary.as_mut_ptr() as *mut c_void,
+                );
+            }
+            if len[0] != out_len {
+                return (Vec::new(), NONE);
+            }
+
+            (binary, format)
+        }
+
+        fn program_binary(&self, program: GLuint, format: GLenum, binary: &[u8]) {
+            if self.glProgramBinary == ptr::null_mut() {
+                _gl_impl_panic("glProgramBinary");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glProgramBinary(
+                    program,
+                    format,
+                    binary.as_ptr() as *const c_void,
+                    binary.len() as GLsizei,
+                );
+            }
+        }
+
+        fn program_parameter_i(&self, program: GLuint, pname: GLenum, value: GLint) {
+            if self.glProgramParameteri == ptr::null_mut() {
+                _gl_impl_panic("glProgramParameteri");
+                return;
+            }
+            unsafe {
+                self.ffi_gl_.glProgramParameteri(program, pname, value);
+            }
+        }
+
+        #[inline]
+        unsafe fn get_vertex_attrib_iv(&self, index: GLuint, pname: GLenum, result: &mut [GLint]) {
+            if self.glGetVertexAttribiv == ptr::null_mut() {
+                _gl_impl_panic("glGetVertexAttribiv");
+                return;
+            }
+            self.ffi_gl_.glGetVertexAttribiv(index, pname, result.as_mut_ptr());
+        }
+
+        #[inline]
+        unsafe fn get_vertex_attrib_fv(&self, index: GLuint, pname: GLenum, result: &mut [GLfloat]) {
+            if self.glGetVertexAttribfv == ptr::null_mut() {
+                _gl_impl_panic("glGetVertexAttribfv");
+                return;
+            }
+            self.ffi_gl_.glGetVertexAttribfv(index, pname, result.as_mut_ptr());
+        }
+
+        fn get_vertex_attrib_pointer_v(&self, index: GLuint, pname: GLenum) -> GLsizeiptr {
+
+            if self.glGetVertexAttribPointerv == ptr::null_mut() {
+                _gl_impl_panic("glGetVertexAttribPointerv");
+                return ptr::null_mut();
+            }
+
+            let mut result = 0 as *mut GLvoid;
+            unsafe {
+                self.ffi_gl_.glGetVertexAttribPointerv(index, pname, &mut result)
+            }
+            result as GLsizeiptr
+        }
+
+        fn get_buffer_parameter_iv(&self, target: GLuint, pname: GLenum) -> GLint {
+
+            if self.glGetBufferParameteriv == ptr::null_mut() {
+                _gl_impl_panic("glGetBufferParameteriv");
+                return 0;
+            }
+
+            let mut result = 0 as GLint;
+            unsafe {
+                self.ffi_gl_.glGetBufferParameteriv(target, pname, &mut result);
+            }
+            result
+        }
+
+        fn get_shader_info_log(&self, shader: GLuint) -> String {
+
+            if self.glGetShaderInfoLog == ptr::null_mut() {
+                _gl_impl_panic("glGetShaderInfoLog");
+                return String::new();
+            }
+
+            let mut max_len = [0];
+            unsafe {
+                self.get_shader_iv(shader, ffi::INFO_LOG_LENGTH, &mut max_len);
+            }
+            if max_len[0] == 0 {
+                return String::new();
+            }
+            let mut result = vec![0u8; max_len[0] as usize];
+            let mut result_len = 0 as GLsizei;
+            unsafe {
+                self.ffi_gl_.glGetShaderInfoLog(
+                    shader,
+                    max_len[0] as GLsizei,
+                    &mut result_len,
+                    result.as_mut_ptr() as *mut GLchar,
+                );
+            }
+            result.truncate(if result_len > 0 {
+                result_len as usize
+            } else {
+                0
+            });
+            String::from_utf8(result).unwrap()
+        }
+
+        fn get_string(&self, which: GLenum) -> String {
+
+            if self.glGetString == ptr::null_mut() {
+                _gl_impl_panic("glGetString");
+                return String::new();
+            }
+
+            unsafe {
+                let llstr = self.ffi_gl_.glGetString(which);
+                if !llstr.is_null() {
+                    str::from_utf8_unchecked(CStr::from_ptr(llstr as *const c_char).to_bytes())
+                        .to_string()
+                } else {
+                    String::new()
+                }
+            }
+        }
+
+        fn get_string_i(&self, which: GLenum, index: GLuint) -> String {
+
+            if self.glGetStringi == ptr::null_mut() {
+                _gl_impl_panic("glGetStringi");
+                return String::new();
+            }
+
+            unsafe {
+                let llstr = self.ffi_gl_.glGetStringi(which, index);
+                if !llstr.is_null() {
+                    str::from_utf8_unchecked(CStr::from_ptr(llstr as *const c_char).to_bytes())
+                        .to_string()
+                } else {
+                    String::new()
+                }
+            }
+        }
+
+        unsafe fn get_shader_iv(&self, shader: GLuint, pname: GLenum, result: &mut [GLint]) {
+
+            if self.glGetShaderiv == ptr::null_mut() {
+                _gl_impl_panic("glGetShaderiv");
+                return;
+            }
+
+            self.ffi_gl_.glGetShaderiv(shader, pname, result.as_mut_ptr());
+        }
+
+        fn get_shader_precision_format(
+            &self,
+            _shader_type: GLuint,
+            precision_type: GLuint,
+        ) -> (GLint, GLint, GLint) {
+
+            // if self.glGetShaderPrecisionFormat == ptr::null_mut() {
+            //     _gl_impl_panic("glGetShaderPrecisionFormat");
+            //     return (0, 0, 0);
+            // }
+
+            // gl.GetShaderPrecisionFormat is not available until OpenGL 4.1.
+            // Fallback to OpenGL standard precissions that most desktop hardware support.
+            match precision_type {
+                ffi::LOW_FLOAT | ffi::MEDIUM_FLOAT | ffi::HIGH_FLOAT => {
+                    // Fallback to IEEE 754 single precision
+                    // Range: from -2^127 to 2^127
+                    // Significand precision: 23 bits
+                    (127, 127, 23)
+                }
+                ffi::LOW_INT | ffi::MEDIUM_INT | ffi::HIGH_INT => {
+                    // Fallback to single precision integer
+                    // Range: from -2^24 to 2^24
+                    // Precision: For integer formats this value is always 0
+                    (24, 24, 0)
+                }
+                _ => (0, 0, 0),
+            }
+        }
+
+        fn compile_shader(&self, shader: GLuint) {
+
+            if self.glCompileShader == ptr::null_mut() {
+                _gl_impl_panic("glCompileShader");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glCompileShader(shader);
+            }
+        }
+
+        fn create_program(&self) -> GLuint {
+
+            if self.glCreateProgram == ptr::null_mut() {
+                _gl_impl_panic("glCreateProgram");
+                return 0;
+            }
+
+            unsafe {
+                return self.ffi_gl_.glCreateProgram();
+            }
+        }
+
+        fn delete_program(&self, program: GLuint) {
+
+            if self.glDeleteProgram == ptr::null_mut() {
+                _gl_impl_panic("glDeleteProgram");
+                return 0;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDeleteProgram(program);
+            }
+        }
+
+        fn create_shader(&self, shader_type: GLenum) -> GLuint {
+
+            if self.glCreateShader == ptr::null_mut() {
+                _gl_impl_panic("glCreateShader");
+                return 0;
+            }
+
+            unsafe {
+                return self.ffi_gl_.glCreateShader(shader_type);
+            }
+        }
+
+        fn delete_shader(&self, shader: GLuint) {
+
+            if self.glDeleteShader == ptr::null_mut() {
+                _gl_impl_panic("glDeleteShader");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDeleteShader(shader);
+            }
+        }
+
+        fn detach_shader(&self, program: GLuint, shader: GLuint) {
+
+            if self.glDetachShader == ptr::null_mut() {
+                _gl_impl_panic("glDetachShader");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDetachShader(program, shader);
+            }
+        }
+
+        fn link_program(&self, program: GLuint) {
+
+            if self.glLinkProgram == ptr::null_mut() {
+                _gl_impl_panic("glLinkProgram");
+                return;
+            }
+
+            unsafe {
+                return self.ffi_gl_.glLinkProgram(program);
+            }
+        }
+
+        fn clear_color(&self, r: f32, g: f32, b: f32, a: f32) {
+
+            if self.glClearColor == ptr::null_mut() {
+                _gl_impl_panic("glClearColor");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glClearColor(r, g, b, a);
+            }
+        }
+
+        fn clear(&self, buffer_mask: GLbitfield) {
+
+            if self.glClear == ptr::null_mut() {
+                _gl_impl_panic("glClear");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glClear(buffer_mask);
+            }
+        }
+
+        fn clear_depth(&self, depth: f64) {
+
+            if self.glClearDepth == ptr::null_mut() {
+                _gl_impl_panic("glClearDepth");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glClearDepth(depth as GLclampd);
+            }
+        }
+
+        fn clear_stencil(&self, s: GLint) {
+
+            if self.glClearStencil == ptr::null_mut() {
+                _gl_impl_panic("glClearStencil");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glClearStencil(s);
+            }
+        }
+
+        fn flush(&self) {
+
+            if self.glFlush == ptr::null_mut() {
+                _gl_impl_panic("glFlush");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glFlush();
+            }
+        }
+
+        fn finish(&self) {
+
+            if self.glFinish == ptr::null_mut() {
+                _gl_impl_panic("glFinish");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glFinish();
+            }
+        }
+
+        fn get_error(&self) -> GLenum {
+
+            if self.glGetError == ptr::null_mut() {
+                _gl_impl_panic("glGetError");
+                return 0;
+            }
+
+            unsafe { self.ffi_gl_.glGetError() }
+        }
+
+        fn stencil_mask(&self, mask: GLuint) {
+
+            if self.glStencilMask == ptr::null_mut() {
+                _gl_impl_panic("glStencilMask");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glStencilMask(mask) }
+        }
+
+        fn stencil_mask_separate(&self, face: GLenum, mask: GLuint) {
+
+            if self.glStencilMaskSeparate == ptr::null_mut() {
+                _gl_impl_panic("glStencilMaskSeparate");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glStencilMaskSeparate(face, mask) }
+        }
+
+        fn stencil_func(&self, func: GLenum, ref_: GLint, mask: GLuint) {
+
+            if self.glStencilFunc == ptr::null_mut() {
+                _gl_impl_panic("glStencilFunc");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glStencilFunc(func, ref_, mask) }
+        }
+
+        fn stencil_func_separate(&self, face: GLenum, func: GLenum, ref_: GLint, mask: GLuint) {
+
+            if self.glStencilFuncSeparate == ptr::null_mut() {
+                _gl_impl_panic("glStencilFuncSeparate");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glStencilFuncSeparate(face, func, ref_, mask) }
+        }
+
+        fn stencil_op(&self, sfail: GLenum, dpfail: GLenum, dppass: GLenum) {
+
+            if self.glStencilOp == ptr::null_mut() {
+                _gl_impl_panic("glStencilOp");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glStencilOp(sfail, dpfail, dppass) }
+        }
+
+        fn stencil_op_separate(&self, face: GLenum, sfail: GLenum, dpfail: GLenum, dppass: GLenum) {
+
+            if self.glStencilOpSeparate == ptr::null_mut() {
+                _gl_impl_panic("glStencilOpSeparate");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glStencilOpSeparate(face, sfail, dpfail, dppass) }
+        }
+
+        #[allow(unused_variables)]
+        fn egl_image_target_texture2d_oes(&self, target: GLenum, image: GLeglImageOES) {
+
+            return; // not supported
+
+            // if self.glEglImageTargetTexture2dOes == ptr::null_mut() {
+            //     _gl_impl_panic("glEglImageTargetTexture2dOes");
+            //     return;
+            // }
+        }
+
+        #[allow(unused_variables)]
+        fn egl_image_target_renderbuffer_storage_oes(&self, target: GLenum, image: GLeglImageOES) {
+
+            return; // not supported
+
+            // if self.glEglImageTargetRenderbufferStorageOes == ptr::null_mut() {
+            //     _gl_impl_panic("glEglImageTargetRenderbufferStorageOes");
+            //     return;
+            // }
+        }
+
+        fn generate_mipmap(&self, target: GLenum) {
+
+            if self.glGenerateMipmap == ptr::null_mut() {
+                _gl_impl_panic("glGenerateMipmap");
+                return;
+            }
+
+            unsafe { self.ffi_gl_.glGenerateMipmap(target) }
+        }
+
+        fn insert_event_marker_ext(&self, message: &str) {
+
+            if self.glInsertEventMarkerEXT == ptr::null_mut() {
+                _gl_impl_panic("glInsertEventMarkerEXT");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glInsertEventMarkerEXT(message.len() as GLsizei, message.as_ptr() as *const _);
+            }
+        }
+
+        fn push_group_marker_ext(&self, message: &str) {
+
+            if self.glPushGroupMarkerEXT == ptr::null_mut() {
+                _gl_impl_panic("glPushGroupMarkerEXT");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glPushGroupMarkerEXT(message.len() as GLsizei, message.as_ptr() as *const _);
+            }
+        }
+
+        fn pop_group_marker_ext(&self) {
+
+            if self.glPopGroupMarkerEXT == ptr::null_mut() {
+                _gl_impl_panic("glPopGroupMarkerEXT");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glPopGroupMarkerEXT();
+            }
+        }
+
+        fn debug_message_insert_khr(&self, source: GLenum, type_: GLenum, id: GLuint, severity: GLenum, message: &str) {
+
+            if self.glDebugMessageInsertKHR == ptr::null_mut() {
+                _gl_impl_panic("glDebugMessageInsertKHR");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDebugMessageInsertKHR(source, type_, id, severity, message.len() as GLsizei, message.as_ptr() as *const _);
+            }
+        }
+
+        fn push_debug_group_khr(&self, source: GLenum, id: GLuint, message: &str) {
+
+            if self.glPushDebugGroupKHR == ptr::null_mut() {
+                _gl_impl_panic("glPushDebugGroupKHR");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glPushDebugGroupKHR(source, id, message.len() as GLsizei, message.as_ptr() as *const _);
+            }
+        }
+
+        fn pop_debug_group_khr(&self) {
+
+            if self.glPopDebugGroupKHR == ptr::null_mut() {
+                _gl_impl_panic("glPopDebugGroupKHR");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glPopDebugGroupKHR();
+            }
+        }
+
+        fn fence_sync(&self, condition: GLenum, flags: GLbitfield) -> GLsync {
+
+            if self.glFenceSync == ptr::null_mut() {
+                _gl_impl_panic("glFenceSync");
+                return ptr::null_mut();
+            }
+
+            unsafe { self.ffi_gl_.glFenceSync(condition, flags) as *const _ }
+        }
+
+        fn client_wait_sync(&self, sync: GLsync, flags: GLbitfield, timeout: GLuint64) -> GLenum {
+
+            if self.glClientWaitSync == ptr::null_mut() {
+                _gl_impl_panic("glClientWaitSync");
+                return 0;
+            }
+
+            unsafe {
+                self.ffi_gl_.glClientWaitSync(sync as *const _, flags, timeout)
+            }
+        }
+
+        fn wait_sync(&self, sync: GLsync, flags: GLbitfield, timeout: GLuint64) {
+
+            if self.glWaitSync == ptr::null_mut() {
+                _gl_impl_panic("glWaitSync");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glWaitSync(sync as *const _, flags, timeout);
+            }
+        }
+
+        fn texture_range_apple(&self, target: GLenum, data: &[u8]) {
+
+            if self.glTextureRangeAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glTextureRangeAPPLE");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTextureRangeAPPLE(
+                    target,
+                    data.len() as GLsizei,
+                    data.as_ptr() as *const c_void,
+                );
+            }
+        }
+
+        fn delete_sync(&self, sync: GLsync) {
+
+            if self.glDeleteSync == ptr::null_mut() {
+                _gl_impl_panic("glDeleteSync");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDeleteSync(sync as *const _);
+            }
+        }
+
+        fn gen_fences_apple(&self, n: GLsizei) -> Vec<GLuint> {
+
+            let mut result = vec![0 as GLuint; n as usize];
+
+            if self.glGenFencesAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glGenFencesAPPLE");
+                return result;
+            }
+
+            unsafe {
+                self.ffi_gl_.glGenFencesAPPLE(n, result.as_mut_ptr());
+            }
+            result
+        }
+
+        fn delete_fences_apple(&self, fences: &[GLuint]) {
+
+            if self.glDeleteFencesAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glDeleteFencesAPPLE");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glDeleteFencesAPPLE(fences.len() as GLsizei, fences.as_ptr());
+            }
+        }
+
+        fn set_fence_apple(&self, fence: GLuint) {
+
+            if self.glSetFenceAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glSetFenceAPPLE");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glSetFenceAPPLE(fence);
+            }
+        }
+
+        fn finish_fence_apple(&self, fence: GLuint) {
+
+            if self.glFinishFenceAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glFinishFenceAPPLE");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glFinishFenceAPPLE(fence);
+            }
+        }
+
+        fn test_fence_apple(&self, fence: GLuint) {
+
+            if self.glTestFenceAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glTestFenceAPPLE");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTestFenceAPPLE(fence);
+            }
+        }
+
+        fn test_object_apple(&self, object: GLenum, name: GLuint) -> GLboolean {
+
+            if self.glTestObjectAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glTestObjectAPPLE");
+                return 0;
+            }
+
+            unsafe {
+                self.ffi_gl_.glTestObjectAPPLE(object, name)
+            }
+        }
+
+        fn finish_object_apple(&self, object: GLenum, name: GLuint) {
+
+            if self.glTestObjectAPPLE == ptr::null_mut() {
+                _gl_impl_panic("glFinishObjectAPPLE");
+                return;
+            }
+
+            unsafe {
+                // the spec has a typo for name as GLint instead of GLuint
+                self.ffi_gl_.glFinishObjectAPPLE(object, name as GLint);
+            }
+        }
+
+        // GL_ARB_blend_func_extended
+        fn bind_frag_data_location_indexed(
+            &self,
+            program: GLuint,
+            color_number: GLuint,
+            index: GLuint,
+            name: &str,
+        ) {
+            if self.glBindFragDataLocationIndexed == ptr::null_mut() {
+                _gl_impl_panic("glBindFragDataLocationIndexed");
+                return;
+            }
+
+            let c_string = encode_ascii(name);
+
+            unsafe {
+                self.ffi_gl_.glBindFragDataLocationIndexed(
+                    program,
+                    color_number,
+                    index,
+                    c_string.as_ptr(),
+                )
+            }
+        }
+
+        fn get_frag_data_index(&self, program: GLuint, name: &str) -> GLint {
+
+            if self.glGetFragDataIndex == ptr::null_mut() {
+                _gl_impl_panic("glGetFragDataIndex");
+                return -1;
+            }
+
+            let c_string = encode_ascii(name);
+
+            unsafe { self.ffi_gl_.glGetFragDataIndex(program, c_string.as_ptr()) }
+        }
+
+        // GL_KHR_debug
+        fn get_debug_messages(&self) -> Vec<DebugMessage> {
+
+            if self.glGetDebugMessageLog == ptr::null_mut() {
+                _gl_impl_panic("glGetDebugMessageLog");
+                return Vec::new();
+            }
+
+            let mut max_message_len = 0;
+            unsafe {
+                self.ffi_gl_
+                    .GetIntegerv(ffi::MAX_DEBUG_MESSAGE_LENGTH, &mut max_message_len)
+            }
+
+            let mut output = Vec::new();
+            const CAPACITY: usize = 4;
+
+            let mut msg_data = vec![0u8; CAPACITY * max_message_len as usize];
+            let mut sources = [0 as GLenum; CAPACITY];
+            let mut types = [0 as GLenum; CAPACITY];
+            let mut severities = [0 as GLenum; CAPACITY];
+            let mut ids = [0 as GLuint; CAPACITY];
+            let mut lengths = [0 as GLsizei; CAPACITY];
+
+            loop {
+                let count = unsafe {
+                    self.ffi_gl_.glGetDebugMessageLog(
+                        CAPACITY as _,
+                        msg_data.len() as _,
+                        sources.as_mut_ptr(),
+                        types.as_mut_ptr(),
+                        ids.as_mut_ptr(),
+                        severities.as_mut_ptr(),
+                        lengths.as_mut_ptr(),
+                        msg_data.as_mut_ptr() as *mut _,
+                    )
+                };
+
+                let mut offset = 0;
+                output.extend((0..count as usize).map(|i| {
+                    let len = lengths[i] as usize;
+                    let slice = &msg_data[offset..offset + len];
+                    offset += len;
+                    DebugMessage {
+                        message: String::from_utf8_lossy(slice).to_string(),
+                        source: sources[i],
+                        ty: types[i],
+                        id: ids[i],
+                        severity: severities[i],
+                    }
+                }));
+
+                if (count as usize) < CAPACITY {
+                    return output;
+                }
+            }
+        }
+
+        fn provoking_vertex_angle(&self, _mode: GLenum) {
+            _gl_impl_panic("glProvokingVertexAngle"); // GLES only
+            return;
+        }
+
+        // GL_KHR_blend_equation_advanced
+        fn blend_barrier_khr(&self) {
+
+            if self.glBlendBarrierKHR == ptr::null_mut() {
+                _gl_impl_panic("glBlendBarrierKHR");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBlendBarrierKHR();
+            }
+        }
+
+        // GL_CHROMIUM_copy_texture
+        fn copy_texture_chromium(&self,
+            _source_id: GLuint, _source_level: GLint,
+            _dest_target: GLenum, _dest_id: GLuint, _dest_level: GLint,
+            _internal_format: GLint, _dest_type: GLenum,
+            _unpack_flip_y: GLboolean, _unpack_premultiply_alpha: GLboolean, _unpack_unmultiply_alpha: GLboolean)
+        {
+            _gl_impl_panic("glCopyTextureChromium"); // GLES only
+            return;
+        }
+        fn copy_sub_texture_chromium(&self,
+            _source_id: GLuint, _source_level: GLint,
+            _dest_target: GLenum, _dest_id: GLuint, _dest_level: GLint,
+            _x_offset: GLint, _y_offset: GLint, _x: GLint, _y: GLint, _width: GLsizei, _height: GLsizei,
+            _unpack_flip_y: GLboolean, _unpack_premultiply_alpha: GLboolean, _unpack_unmultiply_alpha: GLboolean)
+        {
+            _gl_impl_panic("glCopySubTextureChromium"); // GLES only
+            return;
+        }
+
+        // GL_ANGLE_copy_texture_3d
+        fn copy_texture_3d_angle(
+            &self,
+            _source_id: GLuint,
+            _source_level: GLint,
+            _dest_target: GLenum,
+            _dest_id: GLuint,
+            _dest_level: GLint,
+            _internal_format: GLint,
+            _dest_type: GLenum,
+            _unpack_flip_y: GLboolean,
+            _unpack_premultiply_alpha: GLboolean,
+            _unpack_unmultiply_alpha: GLboolean,
+        ) {
+            _gl_impl_panic("glANGLECopyTexture3D"); // ANGLE only
+            return;
+        }
+
+        fn copy_sub_texture_3d_angle(
+            &self,
+            _source_id: GLuint,
+            _source_level: GLint,
+            _dest_target: GLenum,
+            _dest_id: GLuint,
+            _dest_level: GLint,
+            _x_offset: GLint,
+            _y_offset: GLint,
+            _z_offset: GLint,
+            _x: GLint,
+            _y: GLint,
+            _z: GLint,
+            _width: GLsizei,
+            _height: GLsizei,
+            _depth: GLsizei,
+            _unpack_flip_y: GLboolean,
+            _unpack_premultiply_alpha: GLboolean,
+            _unpack_unmultiply_alpha: GLboolean,
+        ) {
+            _gl_impl_panic("glANGLECopySubTexture3D"); // ANGLE only
+            // return;
+        }
+
+        fn buffer_storage(
+            &self,
+            target: GLenum,
+            size: GLsizeiptr,
+            data: *const GLvoid,
+            flags: GLbitfield,
+        ) {
+
+            if self.glBufferStorage == ptr::null_mut() {
+                _gl_impl_panic("glBufferStorage");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glBufferStorage(target, size, data, flags);
+            }
+        }
+
+        fn flush_mapped_buffer_range(&self, target: GLenum, offset: GLintptr, length: GLsizeiptr) {
+
+            if self.glFlushMappedBufferRange == ptr::null_mut() {
+                _gl_impl_panic("glFlushMappedBufferRange");
+                return;
+            }
+
+            unsafe {
+                self.ffi_gl_.glFlushMappedBufferRange(target, offset, length);
+            }
+        }
 
     }
 
