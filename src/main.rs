@@ -634,6 +634,22 @@ mod gl {
         pub type wchar_t = u16;
     }
 
+    pub mod ffi {
+        use super::GLenum;
+        pub const HIGH_INT: GLenum = 0x8DF5;
+        pub const MEDIUM_INT: GLenum = 0x8DF4;
+        pub const LOW_INT: GLenum = 0x8DF3;
+        pub const HIGH_FLOAT: GLenum = 0x8DF2;
+        pub const MEDIUM_FLOAT: GLenum = 0x8DF1;
+        pub const LOW_FLOAT: GLenum = 0x8DF0;
+        pub const INFO_LOG_LENGTH: GLenum = 0x8B84;
+        pub const PROGRAM_BINARY_LENGTH: GLenum = 0x8741;
+        pub const UNIFORM_BLOCK_NAME_LENGTH: GLenum = 0x8A41;
+        pub const UNIFORM_BLOCK_ACTIVE_UNIFORMS: GLenum = 0x8A42;
+        pub const ACTIVE_ATTRIBUTE_MAX_LENGTH: GLenum = 0x8B8A;
+        pub const FLOAT: GLenum = 0x1406;
+    }
+
     pub use self::ctypes::*;
 
     /// Typedef for an OpenGL handle
