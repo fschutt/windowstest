@@ -37,7 +37,7 @@ use winapi::{
             PostQuitMessage, GetWindowLongPtrW, SetWindowLongPtrW,
             WNDCLASSW, CS_HREDRAW, CS_VREDRAW, CS_OWNDC, WM_ERASEBKGND,
             WS_OVERLAPPEDWINDOW, WS_POPUP, CW_USEDEFAULT, SW_MAXIMIZE, SW_SHOWNORMAL,
-            MSG, WS_EX_APPWINDOW, CREATESTRUCTW, GWLP_USERDATA,
+            MSG, WS_EX_APPWINDOW, CREATESTRUCTW, GWLP_USERDATA, WM_RBUTTONDOWN, WM_COMMAND,
             WM_NCCREATE, WM_CREATE, WM_NCMOUSELEAVE, WM_MOUSEMOVE, WM_PAINT, WM_DESTROY,
 
             GetDC, ReleaseDC,
@@ -514,6 +514,26 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
                 }
                 PostQuitMessage(0);
             },
+            WM_RBUTTONDOWN => {
+                use winapi::um::winuser::{
+                    CreatePopupMenu, InsertMenuW, TrackPopupMenu, SetForegroundWindow,
+                    GetCursorPos,
+                    MF_BYPOSITION, MF_STRING, TPM_TOPALIGN, TPM_LEFTALIGN
+                };
+                use winapi::shared::windef::POINT;
+                let mut pos: POINT = POINT { x: 0, y: 0 };
+                GetCursorPos(&mut pos);
+                let hPopupMenu = CreatePopupMenu();
+                let mut a = encode_wide("Exit");
+                let mut b = encode_wide("Play");
+                InsertMenuW(hPopupMenu, 0, MF_BYPOSITION | MF_STRING, 0, a.as_mut_ptr());
+                InsertMenuW(hPopupMenu, 0, MF_BYPOSITION | MF_STRING, 0, b.as_mut_ptr());
+                SetForegroundWindow(hwnd);
+                TrackPopupMenu(hPopupMenu, TPM_TOPALIGN | TPM_LEFTALIGN, pos.x, pos.y, 0, hwnd, ptr::null_mut());
+            },
+            WM_COMMAND => {
+
+            },
             WM_PAINT => {
                 let hDC = GetDC(hwnd);
                 // if hDC.is_mull();
@@ -578,7 +598,6 @@ unsafe extern "system" fn WindowProc(hwnd: HWND, msg: u32, wparam: WPARAM, lpara
                 }
 
                 ReleaseDC(hwnd, hDC);
-                return 0;
             },
             _ => { }
         }
