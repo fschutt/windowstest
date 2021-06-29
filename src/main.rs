@@ -8,7 +8,7 @@ extern crate core;
 extern crate alloc;
 
 use core::{ptr, mem};
-use core::panic::PanicInfo;
+// use core::panic::PanicInfo;
 use core::cell::RefCell;
 
 use alloc::rc::Rc;
@@ -31,9 +31,9 @@ fn panic(_panic: &PanicInfo<'_>) -> ! { loop {} }
 use winapi::{
     ctypes::c_void,
     shared::{
-        windef::{HWND, RECT, HGLRC, HDC, },
-        ntdef::{PWSTR, HRESULT},
-        minwindef::{LPARAM, WPARAM, LRESULT, BOOL, HINSTANCE, HRGN, TRUE},
+        windef::{HWND, RECT, HGLRC, HDC},
+        ntdef::HRESULT,
+        minwindef::{LPARAM, WPARAM, LRESULT, BOOL, HINSTANCE, TRUE},
     },
     um::{
         errhandlingapi::GetLastError,
@@ -648,6 +648,8 @@ mod gl {
         pub const UNIFORM_BLOCK_ACTIVE_UNIFORMS: GLenum = 0x8A42;
         pub const ACTIVE_ATTRIBUTE_MAX_LENGTH: GLenum = 0x8B8A;
         pub const FLOAT: GLenum = 0x1406;
+        pub const ACTIVE_UNIFORM_MAX_LENGTH: GLenum = 0x8B87;
+        pub const MAX_DEBUG_MESSAGE_LENGTH: GLenum = 0x9143;
     }
 
     pub use self::ctypes::*;
@@ -666,7 +668,12 @@ mod gl {
     pub type GLsizei = i32;
     pub type GLclampf = f32;
     pub type GLfloat = f32;
-    pub type GLeglImageOES = *const c_void;
+    pub type GLchar = i8; // = c_char
+    pub type GLclampd = f64;
+
+    pub type GLeglImageOES = gleam::gl::GLeglImageOES; // *const c_void;
+    pub type GLsync = gleam::gl::GLsync; // *const c_void;
+    pub use gleam::gl::DebugMessage;
 
     #[derive(Debug)]
     pub struct WglContext {
@@ -1462,6 +1469,23 @@ mod gl {
         } else {
             unsafe { GetProcAddress(opengl32_dll, func_name.as_mut_ptr()) }
         }) as *mut c_void
+    }
+
+    pub unsafe fn cstr_from_ptr<'a>(ptr: *const c_char) -> &'a str {
+
+        #[inline]
+        unsafe fn strlen(mut s: *const c_char) -> usize {
+            let mut result = 0;
+            while *s != 0 {
+                s = s.offset(1);
+                result += 1;
+            }
+            result
+        }
+
+        let len = strlen(ptr);
+        let ptr = ptr as *const u8; // c_char is always one byte, safe cast
+        core::str::from_utf8_unchecked(core::slice::from_raw_parts(ptr, len as usize + 1))
     }
 
     impl WglContext {
@@ -2799,6 +2823,7 @@ mod gl {
                 (func)(target, internalformat, width, height)
             }
         }
+
         fn depth_func(&self, func: GLenum) {
             if self.glDepthFunc == ptr::null_mut() {
                 _gl_impl_panic("glDepthFunc");
@@ -2897,15 +2922,15 @@ mod gl {
 
             if self.glGetUniformIndices == ptr::null_mut() {
                 _gl_impl_panic("glGetUniformIndices");
-                return Vec::new;
+                return Vec::new();
             }
 
-            let c_strings: Vec<CString> = names.iter().map(|n| encode_ascii(*n)).collect();
+            let c_strings: Vec<Vec<i8>> = names.iter().map(|n| encode_ascii(*n)).collect();
             let pointers: Vec<*const GLchar> = c_strings.iter().map(|string| string.as_ptr()).collect();
             let mut result = vec![0;c_strings.len()];
             unsafe {
-                let func: extern "C" fn(GLuint, )
-                self.ffi_gl_.glGetUniformIndices(
+                let func: extern "C" fn(GLuint, GLsizei, *const *const GLchar, *const GLuint) -> GLuint = mem::transmute(self.glGetUniformIndices);
+                (func)(
                     program,
                     pointers.len() as GLsizei,
                     pointers.as_ptr(),
@@ -2923,7 +2948,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBindBufferBase(target, index, buffer);
+                let func: extern "C" fn(GLenum, GLuint, GLuint) = mem::transmute(self.glBindBufferBase);
+                (func)(target, index, buffer);
             }
         }
 
@@ -2942,7 +2968,8 @@ mod gl {
             }
 
             unsafe {
-                self._ffi_gl.glBindBufferRange(target, index, buffer, offset, size);
+                let func: extern "C" fn(GLenum, GLuint, GLuint, GLintptr, GLsizeiptr) = mem::transmute(self.glBindBufferRange);
+                (func)(target, index, buffer, offset, size);
             }
         }
 
@@ -2959,8 +2986,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_
-                    .UniformBlockBinding(program, uniform_block_index, uniform_block_binding);
+                let func: extern "C" fn(GLuint, GLuint, GLuint) = mem::transmute(self.glUniformBlockBinding);
+                (func)(program, uniform_block_index, uniform_block_binding);
             }
         }
 
@@ -2972,7 +2999,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBindBuffer(target, buffer);
+                let func: extern "C" fn(GLenum, GLuint) = mem::transmute(self.glBindBuffer);
+                (func)(target, buffer);
             }
         }
 
@@ -2984,7 +3012,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBindVertexArray(vao);
+                let func: extern "C" fn(GLuint) = mem::transmute(self.glBindVertexArray);
+                (func)(vao);
             }
         }
 
@@ -2996,7 +3025,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBindVertexArrayAPPLE(vao)
+                let func: extern "C" fn(GLuint) = mem::transmute(self.glBindVertexArrayAPPLE);
+                (func)(vao)
             }
         }
 
@@ -3008,7 +3038,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBindRenderbuffer(target, renderbuffer);
+                let func: extern "C" fn(GLenum, GLuint) = mem::transmute(self.glBindRenderbuffer);
+                (func)(target, renderbuffer);
             }
         }
 
@@ -3020,7 +3051,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBindFramebuffer(target, framebuffer);
+                let func: extern "C" fn(GLenum, GLuint) = mem::transmute(self.glBindFramebuffer);
+                (func)(target, framebuffer);
             }
         }
 
@@ -3032,7 +3064,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBindTexture(target, texture);
+                let func: extern "C" fn(GLenum, GLuint) = mem::transmute(self.glBindTexture);
+                (func)(target, texture);
             }
         }
 
@@ -3044,7 +3077,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDrawBuffers(bufs.len() as GLsizei, bufs.as_ptr());
+                let func: extern "C" fn(GLsizei, *const GLenum) = mem::transmute(self.glDrawBuffers);
+                (func)(bufs.len() as GLsizei, bufs.as_ptr());
             }
         }
 
@@ -3066,9 +3100,11 @@ mod gl {
                 return;
             }
 
+            let func: extern "C" fn(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, *const GLvoid) = unsafe { mem::transmute(self.glTexImage2D) };
+
             match opt_data {
                 Some(data) => unsafe {
-                    self.ffi_gl_.glTexImage2D(
+                    (func)(
                         target,
                         level,
                         internal_format,
@@ -3081,7 +3117,7 @@ mod gl {
                     );
                 },
                 None => unsafe {
-                    self.ffi_gl_.glTexImage2D(
+                    (func)(
                         target,
                         level,
                         internal_format,
@@ -3113,7 +3149,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glCompressedTexImage2D(
+                let func: extern "C" fn(GLenum, GLint, GLenum, GLsizei, GLsizei, GLint, GLsizei, *const GLvoid) = mem::transmute(self.glCompressedTexImage2D);
+                (func)(
                     target,
                     level,
                     internal_format,
@@ -3143,7 +3180,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glCompressedTexSubImage2D(
+                let func: extern "C" fn(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLsizei, *const GLvoid) = mem::transmute(self.glCompressedTexSubImage2D);
+                (func)(
                     target,
                     level,
                     xoffset,
@@ -3181,7 +3219,8 @@ mod gl {
                     Some(data) => mem::transmute(data.as_ptr()),
                     None => ptr::null(),
                 };
-                self.ffi_gl_.glTexImage3D(
+                let func: extern "C" fn(GLenum, GLint, GLint, GLsizei, GLsizei, GLsizei, GLint, GLenum, GLenum, *const GLvoid) = mem::transmute(self.glTexImage3D);
+                (func)(
                     target,
                     level,
                     internal_format,
@@ -3213,7 +3252,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glCopyTexImage2D(
+                let func: extern "C" fn(GLenum,GLint,GLenum,GLint,GLint,GLsizei,GLsizei,GLint) = mem::transmute(self.glCopyTexImage2D);
+                (func)(
                     target,
                     level,
                     internal_format,
@@ -3243,7 +3283,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glCopyTexSubImage2D(target, level, xoffset, yoffset, x, y, width, height);
+                let func: extern "C" fn(GLenum, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei) = mem::transmute(self.glCopyTexSubImage2D);
+                (func)(target, level, xoffset, yoffset, x, y, width, height);
             }
         }
 
@@ -3265,7 +3306,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glCopyTexSubImage3D(
+                let func: extern "C" fn(GLenum, GLint, GLint, GLint, GLint, GLint, GLint, GLsizei, GLsizei) = mem::transmute(self.glCopyTexSubImage3D);
+                (func)(
                     target, level, xoffset, yoffset, zoffset, x, y, width, height,
                 );
             }
@@ -3289,7 +3331,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTexSubImage2D(
+                let func: extern "C" fn(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, *const GLvoid) = mem::transmute(self.glTexSubImage2D);
+                (func)(
                     target,
                     level,
                     xoffset,
@@ -3321,7 +3364,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTexSubImage2D(
+                let func: extern "C" fn(GLenum, GLint, GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, *const GLvoid) = mem::transmute(self.glTexSubImage2D);
+                (func)(
                     target,
                     level,
                     xoffset,
@@ -3355,7 +3399,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTexSubImage3D(
+                let func: extern "C" fn(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, *const GLvoid) = mem::transmute(self.glTexSubImage3D);
+                (func)(
                     target,
                     level,
                     xoffset,
@@ -3391,7 +3436,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTexSubImage3D(
+                let func: extern "C" fn(GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei, GLenum, GLenum, *const GLvoid) = mem::transmute(self.glTexSubImage3D);
+                (func)(
                     target,
                     level,
                     xoffset,
@@ -3420,11 +3466,9 @@ mod gl {
                 return;
             }
 
-            if self.ffi_gl_.glTexStorage2D.is_loaded() {
-                unsafe {
-                    self.ffi_gl_
-                        .TexStorage2D(target, levels, internal_format, width, height);
-                }
+            unsafe {
+                let func: extern "C" fn(GLenum, GLsizei, GLenum, GLsizei, GLsizei) = mem::transmute(self.glTexStorage2D);
+                (func)(target, levels, internal_format, width, height);
             }
         }
 
@@ -3442,11 +3486,9 @@ mod gl {
                 return;
             }
 
-            if self.ffi_gl_.glTexStorage3D.is_loaded() {
-                unsafe {
-                    self.ffi_gl_
-                        .TexStorage3D(target, levels, internal_format, width, height, depth);
-                }
+            unsafe {
+                let func: extern "C" fn(GLenum, GLsizei, GLenum, GLsizei, GLsizei, GLsizei) = mem::transmute(self.glTexStorage3D);
+                (func)(target, levels, internal_format, width, height, depth);
             }
         }
 
@@ -3464,7 +3506,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glGetTexImage(target, level, format, ty, output.as_mut_ptr() as *mut _);
+                let func: extern "C" fn(GLenum, GLint, GLenum, GLenum, *mut GLvoid) = mem::transmute(self.glGetTexImage);
+                (func)(target, level, format, ty, output.as_mut_ptr() as *mut _);
             }
         }
 
@@ -3491,10 +3534,13 @@ mod gl {
                 return;
             }
 
-            self.ffi_gl_.glCopyImageSubData(
-                src_name, src_target, src_level, src_x, src_y, src_z, dst_name, dst_target, dst_level,
-                dst_x, dst_y, dst_z, src_width, src_height, src_depth,
-            );
+            unsafe {
+                let func: extern "C" fn(GLuint, GLenum, GLint, GLint, GLint, GLint, GLuint, GLenum, GLint, GLint, GLint, GLint, GLsizei, GLsizei, GLsizei) = mem::transmute(self.glCopyImageSubData);
+                (func)(
+                    src_name, src_target, src_level, src_x, src_y, src_z, dst_name, dst_target, dst_level,
+                    dst_x, dst_y, dst_z, src_width, src_height, src_depth,
+                );
+            }
         }
 
         fn invalidate_framebuffer(&self, target: GLenum, attachments: &[GLenum]) {
@@ -3505,7 +3551,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glInvalidateFramebuffer(
+                let func: extern "C" fn(GLenum, GLsizei, *const GLenum) = mem::transmute(self.glInvalidateFramebuffer);
+                (func)(
                     target,
                     attachments.len() as GLsizei,
                     attachments.as_ptr(),
@@ -3529,7 +3576,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glInvalidateSubFramebuffer(
+                let func: extern "C" fn(GLenum, GLsizei, *const GLenum, GLint, GLint, GLsizei, GLsizei) = mem::transmute(self.glInvalidateSubFramebuffer);
+                (func)(
                     target,
                     attachments.len() as GLsizei,
                     attachments.as_ptr(),
@@ -3546,7 +3594,9 @@ mod gl {
                 _gl_impl_panic("glGetIntegerv");
                 return;
             }
-            self.ffi_gl_.glGetIntegerv(name, result.as_mut_ptr());
+
+            let func: extern "C" fn(GLenum, *mut GLint) = mem::transmute(self.glGetIntegerv);
+            (func)(name, result.as_mut_ptr());
         }
 
         unsafe fn get_integer_64v(&self, name: GLenum, result: &mut [GLint64]) {
@@ -3554,7 +3604,8 @@ mod gl {
                 _gl_impl_panic("glGetInteger64v");
                 return;
             }
-            self.ffi_gl_.glGetInteger64v(name, result.as_mut_ptr());
+            let func: extern "C" fn(GLenum, *mut GLint64) = mem::transmute(self.glGetInteger64v);
+            (func)(name, result.as_mut_ptr());
         }
 
         unsafe fn get_integer_iv(&self, name: GLenum, index: GLuint, result: &mut [GLint]) {
@@ -3562,16 +3613,18 @@ mod gl {
                 _gl_impl_panic("glGetIntegeri_v");
                 return;
             }
-            self.ffi_gl_.glGetIntegeri_v(name, index, result.as_mut_ptr());
+            let func: extern "C" fn(GLenum, *mut GLint) = mem::transmute(self.glGetIntegeri_v);
+            (func)(name, index, result.as_mut_ptr());
         }
 
         #[inline]
         unsafe fn get_integer_64iv(&self, name: GLenum, index: GLuint, result: &mut [GLint64]) {
-            if self.GetInteger64i_v == ptr::null_mut() {
-                _gl_impl_panic("GetInteger64i_v");
+            if self.glGetInteger64i_v == ptr::null_mut() {
+                _gl_impl_panic("glGetInteger64i_v");
                 return;
             }
-            self.ffi_gl_.GetInteger64i_v(name, index, result.as_mut_ptr());
+            let func: extern "C" fn(GLenum, *mut GLint64) = mem::transmute(self.glGetInteger64i_v);
+            (func)(name, index, result.as_mut_ptr());
         }
 
         #[inline]
@@ -3580,7 +3633,8 @@ mod gl {
                 _gl_impl_panic("glGetBooleanv");
                 return;
             }
-            self.ffi_gl_.glGetBooleanv(name, result.as_mut_ptr());
+            let func: extern "C" fn(GLenum, *mut GLboolean) = mem::transmute(self.glGetBooleanv);
+            (func)(name, result.as_mut_ptr());
         }
 
         #[inline]
@@ -3589,7 +3643,8 @@ mod gl {
                 _gl_impl_panic("glGetFloatv");
                 return;
             }
-            self.ffi_gl_.glGetFloatv(name, result.as_mut_ptr());
+            let func: extern "C" fn(GLenum, *mut GLfloat) = mem::transmute(self.glGetFloatv);
+            (func)(name, result.as_mut_ptr());
         }
 
         fn get_framebuffer_attachment_parameter_iv(
@@ -3604,7 +3659,8 @@ mod gl {
             }
             let mut result: GLint = 0;
             unsafe {
-                self.ffi_gl_.glGetFramebufferAttachmentParameteriv(
+                let func: extern "C" fn(GLenum, GLenum, GLenum, *mut GLint) = mem::transmute(self.glGetFramebufferAttachmentParameteriv);
+                (func)(
                     target,
                     attachment,
                     pname,
@@ -3622,7 +3678,8 @@ mod gl {
 
             let mut result: GLint = 0;
             unsafe {
-                self.ffi_gl_.glGetRenderbufferParameteriv(target, pname, &mut result);
+                let func: extern "C" fn(GLenum, GLenum, *mut GLint) = mem::transmute(self.glGetRenderbufferParameteriv);
+                (func)(target, pname, &mut result);
             }
             result
         }
@@ -3636,7 +3693,8 @@ mod gl {
 
             let mut result: GLint = 0;
             unsafe {
-                self.ffi_gl_.glGetTexParameteriv(target, pname, &mut result);
+                let func: extern "C" fn(GLenum, GLenum, *mut GLint) = mem::transmute(self.glGetTexParameteriv);
+                (func)(target, pname, &mut result);
             }
             result
         }
@@ -3650,7 +3708,8 @@ mod gl {
 
             let mut result: GLfloat = 0.0;
             unsafe {
-                self.ffi_gl_.glGetTexParameterfv(target, pname, &mut result);
+                let func: extern "C" fn(GLenum, GLenum, *mut GLfloat) = mem::transmute(self.glGetTexParameterfv);
+                (func)(target, pname, &mut result);
             }
             result
         }
@@ -3663,7 +3722,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTexParameteri(target, pname, param);
+                let func: extern "C" fn(GLenum, GLenum, GLint) = mem::transmute(self.glTexParameteri);
+                (func)(target, pname, param);
             }
         }
 
@@ -3675,7 +3735,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTexParameterf(target, pname, param);
+                let func: extern "C" fn(GLenum, GLenum, GLfloat) = mem::transmute(self.glTexParameterf);
+                (func)(target, pname, param);
             }
         }
 
@@ -3694,7 +3755,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glFramebufferTexture2D(target, attachment, textarget, texture, level);
+                let func: extern "C" fn(GLenum, GLenum, GLenum, GLuint, GLint) = mem::transmute(self.glFramebufferTexture2D);
+                (func)(target, attachment, textarget, texture, level);
             }
         }
 
@@ -3712,7 +3774,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glFramebufferTextureLayer(target, attachment, texture, level, layer);
+                let func: extern "C" fn(GLenum, GLenum, GLuint, GLint, GLint) = mem::transmute(self.glFramebufferTextureLayer);
+                (func)(target, attachment, texture, level, layer);
             }
         }
 
@@ -3735,7 +3798,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBlitFramebuffer(
+                let func: extern "C" fn(GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLint, GLbitfield, GLenum) = mem::transmute(self.glBlitFramebuffer);
+                (func)(
                     src_x0, src_y0, src_x1, src_y1, dst_x0, dst_y0, dst_x1, dst_y1, mask, filter,
                 );
             }
@@ -3746,7 +3810,11 @@ mod gl {
                 _gl_impl_panic("glVertexAttrib4f");
                 return;
             }
-            unsafe { self.ffi_gl_.glVertexAttrib4f(index, x, y, z, w) }
+
+            unsafe {
+                let func: extern "C" fn(GLuint, GLfloat, GLfloat, GLfloat, GLfloat) = mem::transmute(self.glVertexAttrib4f);
+                (func)(index, x, y, z, w)
+            }
         }
 
         fn vertex_attrib_pointer_f32(
@@ -3763,7 +3831,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glVertexAttribPointer(
+                let func: extern "C" fn(GLuint, GLint, GLenum, GLboolean, GLsizei, *const GLvoid) = mem::transmute(self.glVertexAttribPointer);
+                (func)(
                     index,
                     size,
                     ffi::FLOAT,
@@ -3789,7 +3858,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glVertexAttribPointer(
+                let func: extern "C" fn(GLuint, GLint, GLenum, GLboolean, GLsizei, *const GLvoid) = mem::transmute(self.glVertexAttribPointer);
+                (func)(
                     index,
                     size,
                     type_,
@@ -3814,7 +3884,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glVertexAttribIPointer(index, size, type_, stride, offset as *const GLvoid)
+                let func: extern "C" fn(GLuint, GLint, GLenum, GLsizei, *const GLvoid) = mem::transmute(self.glVertexAttribIPointer);
+                (func)(index, size, type_, stride, offset as *const GLvoid)
             }
         }
 
@@ -3825,7 +3896,10 @@ mod gl {
                 return;
             }
 
-            unsafe { self.ffi_gl_.glVertexAttribDivisor(index, divisor) }
+            unsafe {
+                let func: extern "C" fn(GLuint, GLuint) = mem::transmute(self.glVertexAttribDivisor);
+                (func)(index, divisor)
+            }
         }
 
         fn viewport(&self, x: GLint, y: GLint, width: GLsizei, height: GLsizei) {
@@ -3836,7 +3910,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glViewport(x, y, width, height);
+                let func: extern "C" fn(GLint, GLint, GLsizei, GLsizei) = mem::transmute(self.glViewport);
+                (func)(x, y, width, height);
             }
         }
 
@@ -3848,7 +3923,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glScissor(x, y, width, height);
+                let func: extern "C" fn(GLint, GLint, GLsizei, GLsizei) = mem::transmute(self.glScissor);
+                (func)(x, y, width, height);
             }
         }
 
@@ -3860,7 +3936,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glLineWidth(width);
+                let func: extern "C" fn(GLfloat) = mem::transmute(self.glLineWidth);
+                (func)(width);
             }
         }
 
@@ -3872,7 +3949,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUseProgram(program);
+                let func: extern "C" fn(GLuint) = mem::transmute(self.glUseProgram);
+                (func)(program);
             }
         }
 
@@ -3884,7 +3962,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glValidateProgram(program);
+                let func: extern "C" fn(GLuint) = mem::transmute(self.glValidateProgram);
+                (func)(program);
             }
         }
 
@@ -3896,7 +3975,8 @@ mod gl {
             }
 
             unsafe {
-                return self.ffi_gl_.glDrawArrays(mode, first, count);
+                let func: extern "C" fn(GLenum, GLint, GLsizei) = mem::transmute(self.glDrawArrays);
+                return (func)(mode, first, count);
             }
         }
 
@@ -3914,7 +3994,8 @@ mod gl {
             }
 
             unsafe {
-                return self.ffi_gl_.glDrawArraysInstanced(mode, first, count, primcount);
+                let func: extern "C" fn(GLenum,GLint,GLsizei,GLsizei) = mem::transmute(self.glDrawArraysInstanced);
+                return (func)(mode, first, count, primcount);
             }
         }
 
@@ -3931,7 +4012,8 @@ mod gl {
             }
 
             unsafe {
-                return self.ffi_gl_.glDrawElements(
+                let func: extern "C" fn(GLenum, GLsizei, GLenum, *const GLvoid) = mem::transmute(self.glDrawElements);
+                return (func)(
                     mode,
                     count,
                     element_type,
@@ -3954,7 +4036,8 @@ mod gl {
             }
 
             unsafe {
-                return self.ffi_gl_.glDrawElementsInstanced(
+                let func: extern "C" fn(GLenum, GLsizei, GLenum, *const c_void, GLsizei) = mem::transmute(self.glDrawElementsInstanced);
+                return (func)(
                     mode,
                     count,
                     element_type,
@@ -3972,7 +4055,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBlendColor(r, g, b, a);
+                let func: extern "C" fn(GLclampf, GLclampf, GLclampf, GLclampf) = mem::transmute(self.glBlendColor);
+                (func)(r, g, b, a);
             }
         }
 
@@ -3984,7 +4068,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBlendFunc(sfactor, dfactor);
+                let func: extern "C" fn(GLenum, GLenum) = mem::transmute(self.glBlendFunc);
+                (func)(sfactor, dfactor);
             }
         }
 
@@ -4001,7 +4086,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBlendFuncSeparate(src_rgb, dest_rgb, src_alpha, dest_alpha);
+                let func: extern "C" fn(GLenum, GLenum, GLenum, GLenum) = mem::transmute(self.glBlendFuncSeparate);
+                (func)(src_rgb, dest_rgb, src_alpha, dest_alpha);
             }
         }
 
@@ -4013,7 +4099,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBlendEquation(mode);
+                let func: extern "C" fn(GLenum) = mem::transmute(self.glBlendEquation);
+                (func)(mode);
             }
         }
 
@@ -4025,7 +4112,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBlendEquationSeparate(mode_rgb, mode_alpha);
+                let func: extern "C" fn(GLenum, GLenum) = mem::transmute(self.glBlendEquationSeparate);
+                (func)(mode_rgb, mode_alpha);
             }
         }
 
@@ -4037,7 +4125,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glColorMask(
+                let func: extern "C" fn(GLboolean, GLboolean, GLboolean, GLboolean) = mem::transmute(self.glColorMask);
+                (func)(
                     r as GLboolean,
                     g as GLboolean,
                     b as GLboolean,
@@ -4054,7 +4143,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glCullFace(mode);
+                let func: extern "C" fn(GLenum) = mem::transmute(self.glCullFace);
+                (func)(mode);
             }
         }
 
@@ -4066,7 +4156,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glFrontFace(mode);
+                let func: extern "C" fn(GLenum) = mem::transmute(self.glFrontFace);
+                (func)(mode);
             }
         }
 
@@ -4078,7 +4169,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glEnable(cap);
+                let func: extern "C" fn(GLenum) = mem::transmute(self.glEnable);
+                (func)(cap);
             }
         }
 
@@ -4090,7 +4182,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDisable(cap);
+                let func: extern "C" fn(GLenum) = mem::transmute(self.glDisable);
+                (func)(cap);
             }
         }
 
@@ -4102,7 +4195,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glHint(param_name, param_val);
+                let func: extern "C" fn(GLenum, GLenum) = mem::transmute(self.glHint);
+                (func)(param_name, param_val);
             }
         }
 
@@ -4110,60 +4204,78 @@ mod gl {
 
             if self.glIsEnabled == ptr::null_mut() {
                 _gl_impl_panic("glIsEnabled");
-                return;
+                return 0;
             }
 
-            unsafe { self.ffi_gl_.glIsEnabled(cap) }
+            unsafe {
+                let func: extern "C" fn(GLenum) = mem::transmute(self.glIsEnabled);
+                (func)(cap)
+            }
         }
 
         fn is_shader(&self, shader: GLuint) -> GLboolean {
 
             if self.glIsShader == ptr::null_mut() {
                 _gl_impl_panic("glIsShader");
-                return;
+                return 0;
             }
 
-            unsafe { self.ffi_gl_.glIsShader(shader) }
+            unsafe {
+                let func: extern "C" fn(GLuint) -> GLboolean = mem::transmute(self.glIsShader);
+                (func)(shader)
+            }
         }
 
         fn is_texture(&self, texture: GLenum) -> GLboolean {
 
             if self.glIsTexture == ptr::null_mut() {
                 _gl_impl_panic("glIsTexture");
-                return;
+                return 0;
             }
 
-            unsafe { self.ffi_gl_.glIsTexture(texture) }
+            unsafe {
+                let func: extern "C" fn(GLenum) -> GLboolean = mem::transmute(self.glIsTexture);
+                (func)(texture)
+            }
         }
 
         fn is_framebuffer(&self, framebuffer: GLenum) -> GLboolean {
 
             if self.glIsFramebuffer == ptr::null_mut() {
                 _gl_impl_panic("glIsFramebuffer");
-                return;
+                return 0;
             }
 
-            unsafe { self.ffi_gl_.glIsFramebuffer(framebuffer) }
+            unsafe {
+                let func: extern "C" fn(GLenum) -> GLboolean = mem::transmute(self.glIsFramebuffer);
+                (func)(framebuffer)
+            }
         }
 
         fn is_renderbuffer(&self, renderbuffer: GLenum) -> GLboolean {
 
             if self.glIsRenderbuffer == ptr::null_mut() {
                 _gl_impl_panic("glIsRenderbuffer");
-                return;
+                return 0;
             }
 
-            unsafe { self.ffi_gl_.glIsRenderbuffer(renderbuffer) }
+            unsafe {
+                let func: extern "C" fn(GLenum) -> GLboolean = mem::transmute(self.glIsRenderbuffer);
+                (func)(renderbuffer)
+            }
         }
 
         fn check_frame_buffer_status(&self, target: GLenum) -> GLenum {
 
             if self.glCheckFramebufferStatus == ptr::null_mut() {
                 _gl_impl_panic("glCheckFramebufferStatus");
-                return;
+                return 0;
             }
 
-            unsafe { self.ffi_gl_.glCheckFramebufferStatus(target) }
+            unsafe {
+                let func: extern "C" fn(GLenum) -> GLenum = mem::transmute(self.glCheckFramebufferStatus);
+                (func)(target)
+            }
         }
 
         fn enable_vertex_attrib_array(&self, index: GLuint) {
@@ -4174,7 +4286,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glEnableVertexAttribArray(index);
+                let func: extern "C" fn(GLuint) = mem::transmute(self.glEnableVertexAttribArray);
+                (func)(index);
             }
         }
 
@@ -4186,7 +4299,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDisableVertexAttribArray(index);
+                let func: extern "C" fn(GLuint) = mem::transmute(self.glDisableVertexAttribArray);
+                (func)(index);
             }
         }
 
@@ -4198,7 +4312,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform1f(location, v0);
+                let func: extern "C" fn(GLint, GLfloat) = mem::transmute(self.glUniform1f);
+                (func)(location, v0);
             }
         }
 
@@ -4210,7 +4325,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform1fv(location, values.len() as GLsizei, values.as_ptr());
+                let func: extern "C" fn(GLint, GLsizei, *const GLfloat) = mem::transmute(self.glUniform1fv);
+                (func)(location, values.len() as GLsizei, values.as_ptr());
             }
         }
 
@@ -4222,7 +4338,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform1i(location, v0);
+                let func: extern "C" fn(GLint, GLint) = mem::transmute(self.glUniform1i);
+                (func)(location, v0);
             }
         }
 
@@ -4234,7 +4351,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform1iv(location, values.len() as GLsizei, values.as_ptr());
+                let func: extern "C" fn(GLint, GLsizei, *const GLint) = mem::transmute(self.glUniform1iv);
+                (func)(location, values.len() as GLsizei, values.as_ptr());
             }
         }
 
@@ -4246,7 +4364,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform1ui(location, v0);
+                let func: extern "C" fn(GLint, GLuint) = mem::transmute(self.glUniform1ui);
+                (func)(location, v0);
             }
         }
 
@@ -4258,7 +4377,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform2f(location, v0, v1);
+                let func: extern "C" fn(GLint, GLfloat, GLfloat) = mem::transmute(self.glUniform2f);
+                (func)(location, v0, v1);
             }
         }
 
@@ -4270,7 +4390,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform2fv(location, (values.len() / 2) as GLsizei, values.as_ptr());
+                let func: extern "C" fn(GLint, GLsizei, *const GLfloat) = mem::transmute(self.glUniform2fv);
+                (func)(location, (values.len() / 2) as GLsizei, values.as_ptr());
             }
         }
 
@@ -4282,7 +4403,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform2i(location, v0, v1);
+                let func: extern "C" fn(GLint, GLint, GLint) = mem::transmute(self.glUniform2i);
+                (func)(location, v0, v1);
             }
         }
 
@@ -4294,7 +4416,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform2iv(location, (values.len() / 2) as GLsizei, values.as_ptr());
+                let func: extern "C" fn(GLint, GLsizei, *const GLint) = mem::transmute(self.glUniform2iv);
+                (func)(location, (values.len() / 2) as GLsizei, values.as_ptr());
             }
         }
 
@@ -4306,7 +4429,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform2ui(location, v0, v1);
+                let func: extern "C" fn(GLint, GLuint, GLuint) = mem::transmute(self.glUniform2ui);
+                (func)(location, v0, v1);
             }
         }
 
@@ -4318,7 +4442,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform3f(location, v0, v1, v2);
+                let func: extern "C" fn(GLint, GLfloat, GLfloat, GLfloat) = mem::transmute(self.glUniform3f);
+                (func)(location, v0, v1, v2);
             }
         }
 
@@ -4330,7 +4455,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform3fv(location, (values.len() / 3) as GLsizei, values.as_ptr());
+                let func: extern "C" fn(GLint, GLsizei, *const GLfloat) = mem::transmute(self.glUniform3fv);
+                (func)(location, (values.len() / 3) as GLsizei, values.as_ptr());
             }
         }
 
@@ -4342,7 +4468,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform3i(location, v0, v1, v2);
+                let func: extern "C" fn(GLint, GLint, GLint, GLint) = mem::transmute(self.glUniform3i);
+                (func)(location, v0, v1, v2);
             }
         }
 
@@ -4354,7 +4481,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform3iv(location, (values.len() / 3) as GLsizei, values.as_ptr());
+                let func: extern "C" fn(GLint, GLsizei, *const GLint) = mem::transmute(self.glUniform3iv);
+                (func)(location, (values.len() / 3) as GLsizei, values.as_ptr());
             }
         }
 
@@ -4366,7 +4494,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform3ui(location, v0, v1, v2);
+                let func: extern "C" fn(GLint, GLuint, GLuint, GLuint) = mem::transmute(self.glUniform3ui);
+                (func)(location, v0, v1, v2);
             }
         }
 
@@ -4378,7 +4507,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform4f(location, x, y, z, w);
+                let func: extern "C" fn(GLint, GLfloat, GLfloat, GLfloat, GLfloat) = mem::transmute(self.glUniform4f);
+                (func)(location, x, y, z, w);
             }
         }
 
@@ -4390,7 +4520,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform4i(location, x, y, z, w);
+                let func: extern "C" fn(GLint, GLint, GLint, GLint, GLint) = mem::transmute(self.glUniform4i);
+                (func)(location, x, y, z, w);
             }
         }
 
@@ -4402,7 +4533,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform4iv(location, (values.len() / 4) as GLsizei, values.as_ptr());
+                let func: extern "C" fn(GLint, GLsizei, *const GLint) = mem::transmute(self.glUniform4iv);
+                (func)(location, (values.len() / 4) as GLsizei, values.as_ptr());
             }
         }
 
@@ -4414,7 +4546,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform4ui(location, x, y, z, w);
+                let func: extern "C" fn(GLint, GLuint, GLuint, GLuint, GLuint) = mem::transmute(self.glUniform4ui);
+                (func)(location, x, y, z, w);
             }
         }
 
@@ -4426,7 +4559,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniform4fv(location, (values.len() / 4) as GLsizei, values.as_ptr());
+                let func: extern "C" fn(GLint, GLsizei, *const GLfloat) = mem::transmute(self.glUniform4fv);
+                (func)(location, (values.len() / 4) as GLsizei, values.as_ptr());
             }
         }
 
@@ -4438,7 +4572,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniformMatrix2fv(
+                let func: extern "C" fn(GLint, GLsizei, GLboolean, *const GLfloat) = mem::transmute(self.glUniformMatrix2fv);
+                (func)(
                     location,
                     (value.len() / 4) as GLsizei,
                     transpose as GLboolean,
@@ -4455,7 +4590,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniformMatrix3fv(
+                let func: extern "C" fn(GLint, GLsizei, GLboolean, *const GLfloat) = mem::transmute(self.glUniformMatrix3fv);
+                (func)(
                     location,
                     (value.len() / 9) as GLsizei,
                     transpose as GLboolean,
@@ -4472,7 +4608,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glUniformMatrix4fv(
+                let func: extern "C" fn(GLint, GLsizei, GLboolean, *const GLfloat) = mem::transmute(self.glUniformMatrix4fv);
+                (func)(
                     location,
                     (value.len() / 16) as GLsizei,
                     transpose as GLboolean,
@@ -4489,7 +4626,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDepthMask(flag as GLboolean);
+                let func: extern "C" fn(GLboolean) = mem::transmute(self.glDepthMask);
+                (func)(flag as GLboolean);
             }
         }
 
@@ -4501,7 +4639,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDepthRange(near as GLclampd, far as GLclampd);
+                let func: extern "C" fn(GLclampd, GLclampd) = mem::transmute(self.glDepthRange);
+                (func)(near as GLclampd, far as GLclampd);
             }
         }
 
@@ -4521,7 +4660,8 @@ mod gl {
             let mut size = 0 as i32;
             let mut type_ = 0 as u32;
             unsafe {
-                self.ffi_gl_.glGetActiveAttrib(
+                let func: extern "C" fn(GLuint, GLuint, GLsizei, *mut GLsizei, *mut GLint, *mut GLenum, *mut GLchar) = mem::transmute(self.glGetActiveAttrib);
+                (func)(
                     program,
                     index,
                     buf_size[0],
@@ -4552,7 +4692,8 @@ mod gl {
             let mut type_: u32 = 0;
 
             unsafe {
-                self.ffi_gl_.glGetActiveUniform(
+                let func: extern "C" fn(GLuint, GLuint, GLsizei, *mut GLsizei, *mut GLint, *mut GLenum, *mut GLchar) = mem::transmute(self.glGetActiveUniform);
+                (func)(
                     program,
                     index,
                     buf_size[0],
@@ -4583,7 +4724,8 @@ mod gl {
             let mut result = Vec::with_capacity(indices.len());
             unsafe {
                 result.set_len(indices.len());
-                self.ffi_gl_.glGetActiveUniformsiv(
+                let func: extern "C" fn(GLuint, GLsizei, *const GLuint, GLenum, *mut GLint) = mem::transmute(self.glGetActiveUniformsiv);
+                (func)(
                     program,
                     indices.len() as GLsizei,
                     indices.as_ptr(),
@@ -4603,7 +4745,8 @@ mod gl {
 
             let mut result = 0;
             unsafe {
-                self.ffi_gl_.glGetActiveUniformBlockiv(program, index, pname, &mut result);
+                let func: extern "C" fn(GLuint, GLuint, GLenum, *mut GLint) = mem::transmute(self.glGetActiveUniformBlockiv);
+                (func)(program, index, pname, &mut result);
             }
             result
         }
@@ -4624,7 +4767,8 @@ mod gl {
             let mut result = Vec::with_capacity(count as usize);
             unsafe {
                 result.set_len(count as usize);
-                self.ffi_gl_.glGetActiveUniformBlockiv(program, index, pname, result.as_mut_ptr());
+                let func: extern "C" fn(GLuint, GLuint, GLenum, *mut GLint) = mem::transmute(self.glGetActiveUniformBlockiv);
+                (func)(program, index, pname, result.as_mut_ptr());
             }
             result
         }
@@ -4640,7 +4784,8 @@ mod gl {
             let mut name = vec![0 as u8; buf_size as usize];
             let mut length: GLsizei = 0;
             unsafe {
-                self.ffi_gl_.glGetActiveUniformBlockName(
+                let func: extern "C" fn(GLuint, GLuint, GLsizei, *mut GLsizei, *mut GLchar) = mem::transmute(self.glGetActiveUniformBlockName);
+                (func)(
                     program,
                     index,
                     buf_size,
@@ -4661,7 +4806,10 @@ mod gl {
             }
 
             let name = encode_ascii(name);
-            unsafe { self.ffi_gl_.glGetAttribLocation(program, name.as_ptr()) }
+            unsafe {
+                let func: extern "C" fn(GLuint, *const GLchar) = mem::transmute(self.glGetAttribLocation);
+                (func)(program, name.as_ptr())
+            }
         }
 
         fn get_frag_data_location(&self, program: GLuint, name: &str) -> c_int {
@@ -4672,7 +4820,10 @@ mod gl {
             }
 
             let name = encode_ascii(name);
-            unsafe { self.ffi_gl_.glGetFragDataLocation(program, name.as_ptr()) }
+            unsafe {
+                let func: extern "C" fn(GLuint, *const c_char) = mem::transmute(self.glGetFragDataLocation);
+                (func)(program, name.as_ptr())
+            }
         }
 
         fn get_uniform_location(&self, program: GLuint, name: &str) -> c_int {
@@ -4683,7 +4834,10 @@ mod gl {
             }
 
             let name = encode_ascii(name);
-            unsafe { self.ffi_gl_.glGetUniformLocation(program, name.as_ptr()) }
+            unsafe {
+                let func: extern "C" fn(GLuint, *const GLchar) = mem::transmute(self.glGetUniformLocation);
+                (func)(program, name.as_ptr())
+            }
         }
 
         fn get_program_info_log(&self, program: GLuint) -> String {
@@ -4703,7 +4857,8 @@ mod gl {
             let mut result = vec![0u8; max_len[0] as usize];
             let mut result_len = 0 as GLsizei;
             unsafe {
-                self.ffi_gl_.glGetProgramInfoLog(
+                let func: extern "C" fn(GLuint, GLsizei, *mut GLsizei, *mut GLchar) = mem::transmute(self.glGetProgramInfoLog);
+                (func)(
                     program,
                     max_len[0] as GLsizei,
                     &mut result_len,
@@ -4724,7 +4879,8 @@ mod gl {
                 _gl_impl_panic("glGetProgramiv");
                 return;
             }
-            self.ffi_gl_.glGetProgramiv(program, pname, result.as_mut_ptr());
+            let func: extern "C" fn(GLuint, GLenum, *mut GLint) = mem::transmute(self.glGetProgramiv);
+            (func)(program, pname, result.as_mut_ptr());
         }
 
         fn get_program_binary(&self, program: GLuint) -> (Vec<u8>, GLenum) {
@@ -4748,7 +4904,8 @@ mod gl {
             let mut out_len = 0;
             unsafe {
                 binary.set_len(len[0] as usize);
-                self.ffi_gl_.glGetProgramBinary(
+                let func: extern "C" fn(GLuint, GLsizei, *mut GLsizei, *mut GLenum, *mut c_void) = mem::transmute(self.glGetProgramBinary);
+                (func)(
                     program,
                     len[0],
                     &mut out_len as *mut GLsizei,
@@ -4770,7 +4927,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glProgramBinary(
+                let func: extern "C" fn(GLuint, GLenum, *const c_void, GLsizei) = mem::transmute(self.glProgramBinary);
+                (func)(
                     program,
                     format,
                     binary.as_ptr() as *const c_void,
@@ -4785,7 +4943,8 @@ mod gl {
                 return;
             }
             unsafe {
-                self.ffi_gl_.glProgramParameteri(program, pname, value);
+                let func: extern "C" fn(GLuint, GLenum, GLint) = mem::transmute(self.glProgramParameteri);
+                (func)(program, pname, value);
             }
         }
 
@@ -4795,7 +4954,8 @@ mod gl {
                 _gl_impl_panic("glGetVertexAttribiv");
                 return;
             }
-            self.ffi_gl_.glGetVertexAttribiv(index, pname, result.as_mut_ptr());
+            let func: extern "C" fn() = mem::transmute(self.glGetVertexAttribiv);
+            (func)(index, pname, result.as_mut_ptr());
         }
 
         #[inline]
@@ -4804,19 +4964,21 @@ mod gl {
                 _gl_impl_panic("glGetVertexAttribfv");
                 return;
             }
-            self.ffi_gl_.glGetVertexAttribfv(index, pname, result.as_mut_ptr());
+            let func: extern "C" fn() = mem::transmute(self.glGetVertexAttribfv);
+            (func)(index, pname, result.as_mut_ptr());
         }
 
         fn get_vertex_attrib_pointer_v(&self, index: GLuint, pname: GLenum) -> GLsizeiptr {
 
             if self.glGetVertexAttribPointerv == ptr::null_mut() {
                 _gl_impl_panic("glGetVertexAttribPointerv");
-                return ptr::null_mut();
+                return 0;
             }
 
             let mut result = 0 as *mut GLvoid;
             unsafe {
-                self.ffi_gl_.glGetVertexAttribPointerv(index, pname, &mut result)
+                let func: extern "C" fn() = mem::transmute(self.glGetVertexAttribPointerv);
+                (func)(index, pname, &mut result)
             }
             result as GLsizeiptr
         }
@@ -4830,7 +4992,8 @@ mod gl {
 
             let mut result = 0 as GLint;
             unsafe {
-                self.ffi_gl_.glGetBufferParameteriv(target, pname, &mut result);
+                let func: extern "C" fn() = mem::transmute(self.glGetBufferParameteriv);
+                (func)(target, pname, &mut result);
             }
             result
         }
@@ -4852,7 +5015,8 @@ mod gl {
             let mut result = vec![0u8; max_len[0] as usize];
             let mut result_len = 0 as GLsizei;
             unsafe {
-                self.ffi_gl_.glGetShaderInfoLog(
+                let func: extern "C" fn() = mem::transmute(self.glGetShaderInfoLog);
+                (func)(
                     shader,
                     max_len[0] as GLsizei,
                     &mut result_len,
@@ -4875,9 +5039,10 @@ mod gl {
             }
 
             unsafe {
-                let llstr = self.ffi_gl_.glGetString(which);
+                let func: extern "C" fn() = mem::transmute(self.glGetString);
+                let llstr = (func)(which);
                 if !llstr.is_null() {
-                    str::from_utf8_unchecked(CStr::from_ptr(llstr as *const c_char).to_bytes())
+                    str::from_utf8_unchecked(cstr_from_ptr(llstr as *const c_char).to_bytes())
                         .to_string()
                 } else {
                     String::new()
@@ -4893,9 +5058,10 @@ mod gl {
             }
 
             unsafe {
-                let llstr = self.ffi_gl_.glGetStringi(which, index);
+                let func: extern "C" fn() = mem::transmute(self.glGetStringi);
+                let llstr = (func)(which, index);
                 if !llstr.is_null() {
-                    str::from_utf8_unchecked(CStr::from_ptr(llstr as *const c_char).to_bytes())
+                    str::from_utf8_unchecked(cstr_from_ptr(llstr as *const c_char).to_bytes())
                         .to_string()
                 } else {
                     String::new()
@@ -4910,7 +5076,8 @@ mod gl {
                 return;
             }
 
-            self.ffi_gl_.glGetShaderiv(shader, pname, result.as_mut_ptr());
+let func: extern "C" fn() = mem::transmute(self.glGetShaderiv);
+            (func)(shader, pname, result.as_mut_ptr());
         }
 
         fn get_shader_precision_format(
@@ -4951,7 +5118,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glCompileShader(shader);
+                let func: extern "C" fn() = mem::transmute(self.glCompileShader);
+                (func)(shader);
             }
         }
 
@@ -4963,7 +5131,8 @@ mod gl {
             }
 
             unsafe {
-                return self.ffi_gl_.glCreateProgram();
+                let func: extern "C" fn() = mem::transmute(self.glCreateProgram);
+                return (func)();
             }
         }
 
@@ -4971,11 +5140,12 @@ mod gl {
 
             if self.glDeleteProgram == ptr::null_mut() {
                 _gl_impl_panic("glDeleteProgram");
-                return 0;
+                return;
             }
 
             unsafe {
-                self.ffi_gl_.glDeleteProgram(program);
+                let func: extern "C" fn() = mem::transmute(self.glDeleteProgram);
+                (func)(program);
             }
         }
 
@@ -4987,7 +5157,8 @@ mod gl {
             }
 
             unsafe {
-                return self.ffi_gl_.glCreateShader(shader_type);
+                let func: extern "C" fn() = mem::transmute(self.glCreateShader);
+                return (func)(shader_type);
             }
         }
 
@@ -4999,7 +5170,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDeleteShader(shader);
+                let func: extern "C" fn() = mem::transmute(self.glDeleteShader);
+                (func)(shader);
             }
         }
 
@@ -5011,7 +5183,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDetachShader(program, shader);
+                let func: extern "C" fn() = mem::transmute(self.glDetachShader);
+                (func)(program, shader);
             }
         }
 
@@ -5023,7 +5196,8 @@ mod gl {
             }
 
             unsafe {
-                return self.ffi_gl_.glLinkProgram(program);
+                let func: extern "C" fn() = mem::transmute(self.glLinkProgram);
+                return (func)(program);
             }
         }
 
@@ -5035,7 +5209,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glClearColor(r, g, b, a);
+                let func: extern "C" fn() = mem::transmute(self.glClearColor);
+                (func)(r, g, b, a);
             }
         }
 
@@ -5047,7 +5222,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glClear(buffer_mask);
+                let func: extern "C" fn() = mem::transmute(self.glClear);
+                (func)(buffer_mask);
             }
         }
 
@@ -5059,7 +5235,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glClearDepth(depth as GLclampd);
+                let func: extern "C" fn() = mem::transmute(self.glClearDepth);
+                (func)(depth as GLclampd);
             }
         }
 
@@ -5071,7 +5248,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glClearStencil(s);
+                let func: extern "C" fn() = mem::transmute(self.glClearStencil);
+                (func)(s);
             }
         }
 
@@ -5083,7 +5261,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glFlush();
+                let func: extern "C" fn() = mem::transmute(self.glFlush);
+                (func)();
             }
         }
 
@@ -5095,7 +5274,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glFinish();
+                let func: extern "C" fn() = mem::transmute(self.glFinish);
+                (func)();
             }
         }
 
@@ -5106,7 +5286,8 @@ mod gl {
                 return 0;
             }
 
-            unsafe { self.ffi_gl_.glGetError() }
+let func: extern "C" fn() = mem::transmute(self.glGetError);
+            unsafe { (func)() }
         }
 
         fn stencil_mask(&self, mask: GLuint) {
@@ -5116,7 +5297,8 @@ mod gl {
                 return;
             }
 
-            unsafe { self.ffi_gl_.glStencilMask(mask) }
+let func: extern "C" fn() = mem::transmute(self.glStencilMask);
+            unsafe { (func)(mask) }
         }
 
         fn stencil_mask_separate(&self, face: GLenum, mask: GLuint) {
@@ -5126,7 +5308,8 @@ mod gl {
                 return;
             }
 
-            unsafe { self.ffi_gl_.glStencilMaskSeparate(face, mask) }
+let func: extern "C" fn() = mem::transmute(self.glStencilMaskSeparate);
+            unsafe { (func)(face, mask) }
         }
 
         fn stencil_func(&self, func: GLenum, ref_: GLint, mask: GLuint) {
@@ -5136,7 +5319,8 @@ mod gl {
                 return;
             }
 
-            unsafe { self.ffi_gl_.glStencilFunc(func, ref_, mask) }
+let func: extern "C" fn() = mem::transmute(self.glStencilFunc);
+            unsafe { (func)(func, ref_, mask) }
         }
 
         fn stencil_func_separate(&self, face: GLenum, func: GLenum, ref_: GLint, mask: GLuint) {
@@ -5146,7 +5330,8 @@ mod gl {
                 return;
             }
 
-            unsafe { self.ffi_gl_.glStencilFuncSeparate(face, func, ref_, mask) }
+let func: extern "C" fn() = mem::transmute(self.glStencilFuncSeparate);
+            unsafe { (func)(face, func, ref_, mask) }
         }
 
         fn stencil_op(&self, sfail: GLenum, dpfail: GLenum, dppass: GLenum) {
@@ -5156,7 +5341,8 @@ mod gl {
                 return;
             }
 
-            unsafe { self.ffi_gl_.glStencilOp(sfail, dpfail, dppass) }
+let func: extern "C" fn() = mem::transmute(self.glStencilOp);
+            unsafe { (func)(sfail, dpfail, dppass) }
         }
 
         fn stencil_op_separate(&self, face: GLenum, sfail: GLenum, dpfail: GLenum, dppass: GLenum) {
@@ -5166,7 +5352,8 @@ mod gl {
                 return;
             }
 
-            unsafe { self.ffi_gl_.glStencilOpSeparate(face, sfail, dpfail, dppass) }
+let func: extern "C" fn() = mem::transmute(self.glStencilOpSeparate);
+            unsafe { (func)(face, sfail, dpfail, dppass) }
         }
 
         #[allow(unused_variables)]
@@ -5198,7 +5385,8 @@ mod gl {
                 return;
             }
 
-            unsafe { self.ffi_gl_.glGenerateMipmap(target) }
+let func: extern "C" fn() = mem::transmute(self.glGenerateMipmap);
+            unsafe { (func)(target) }
         }
 
         fn insert_event_marker_ext(&self, message: &str) {
@@ -5209,7 +5397,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glInsertEventMarkerEXT(message.len() as GLsizei, message.as_ptr() as *const _);
+                let func: extern "C" fn() = mem::transmute(self.glInsertEventMarkerEXT);
+                (func)(message.len() as GLsizei, message.as_ptr() as *const _);
             }
         }
 
@@ -5221,7 +5410,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glPushGroupMarkerEXT(message.len() as GLsizei, message.as_ptr() as *const _);
+                let func: extern "C" fn() = mem::transmute(self.glPushGroupMarkerEXT);
+                (func)(message.len() as GLsizei, message.as_ptr() as *const _);
             }
         }
 
@@ -5233,7 +5423,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glPopGroupMarkerEXT();
+                let func: extern "C" fn() = mem::transmute(self.glPopGroupMarkerEXT);
+                (func)();
             }
         }
 
@@ -5245,7 +5436,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDebugMessageInsertKHR(source, type_, id, severity, message.len() as GLsizei, message.as_ptr() as *const _);
+                let func: extern "C" fn() = mem::transmute(self.glDebugMessageInsertKHR);
+                (func)(source, type_, id, severity, message.len() as GLsizei, message.as_ptr() as *const _);
             }
         }
 
@@ -5257,7 +5449,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glPushDebugGroupKHR(source, id, message.len() as GLsizei, message.as_ptr() as *const _);
+                let func: extern "C" fn() = mem::transmute(self.glPushDebugGroupKHR);
+                (func)(source, id, message.len() as GLsizei, message.as_ptr() as *const _);
             }
         }
 
@@ -5269,7 +5462,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glPopDebugGroupKHR();
+                let func: extern "C" fn() = mem::transmute(self.glPopDebugGroupKHR);
+                (func)();
             }
         }
 
@@ -5280,7 +5474,8 @@ mod gl {
                 return ptr::null_mut();
             }
 
-            unsafe { self.ffi_gl_.glFenceSync(condition, flags) as *const _ }
+let func: extern "C" fn() = mem::transmute(self.glFenceSync);
+            unsafe { (func)(condition, flags) as *const _ }
         }
 
         fn client_wait_sync(&self, sync: GLsync, flags: GLbitfield, timeout: GLuint64) -> GLenum {
@@ -5291,7 +5486,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glClientWaitSync(sync as *const _, flags, timeout)
+                let func: extern "C" fn() = mem::transmute(self.glClientWaitSync);
+                (func)(sync as *const _, flags, timeout)
             }
         }
 
@@ -5303,7 +5499,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glWaitSync(sync as *const _, flags, timeout);
+                let func: extern "C" fn() = mem::transmute(self.glWaitSync);
+                (func)(sync as *const _, flags, timeout);
             }
         }
 
@@ -5315,7 +5512,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTextureRangeAPPLE(
+                let func: extern "C" fn() = mem::transmute(self.glTextureRangeAPPLE);
+                (func)(
                     target,
                     data.len() as GLsizei,
                     data.as_ptr() as *const c_void,
@@ -5331,7 +5529,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDeleteSync(sync as *const _);
+                let func: extern "C" fn() = mem::transmute(self.glDeleteSync);
+                (func)(sync as *const _);
             }
         }
 
@@ -5345,7 +5544,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glGenFencesAPPLE(n, result.as_mut_ptr());
+                let func: extern "C" fn() = mem::transmute(self.glGenFencesAPPLE);
+                (func)(n, result.as_mut_ptr());
             }
             result
         }
@@ -5358,7 +5558,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glDeleteFencesAPPLE(fences.len() as GLsizei, fences.as_ptr());
+                let func: extern "C" fn() = mem::transmute(self.glDeleteFencesAPPLE);
+                (func)(fences.len() as GLsizei, fences.as_ptr());
             }
         }
 
@@ -5370,7 +5571,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glSetFenceAPPLE(fence);
+                let func: extern "C" fn() = mem::transmute(self.glSetFenceAPPLE);
+                (func)(fence);
             }
         }
 
@@ -5382,7 +5584,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glFinishFenceAPPLE(fence);
+                let func: extern "C" fn() = mem::transmute(self.glFinishFenceAPPLE);
+                (func)(fence);
             }
         }
 
@@ -5394,7 +5597,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTestFenceAPPLE(fence);
+                let func: extern "C" fn() = mem::transmute(self.glTestFenceAPPLE);
+                (func)(fence);
             }
         }
 
@@ -5406,7 +5610,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glTestObjectAPPLE(object, name)
+                let func: extern "C" fn() = mem::transmute(self.glTestObjectAPPLE);
+                (func)(object, name)
             }
         }
 
@@ -5419,7 +5624,8 @@ mod gl {
 
             unsafe {
                 // the spec has a typo for name as GLint instead of GLuint
-                self.ffi_gl_.glFinishObjectAPPLE(object, name as GLint);
+                let func: extern "C" fn() = mem::transmute(self.glFinishObjectAPPLE);
+                (func)(object, name as GLint);
             }
         }
 
@@ -5439,7 +5645,8 @@ mod gl {
             let c_string = encode_ascii(name);
 
             unsafe {
-                self.ffi_gl_.glBindFragDataLocationIndexed(
+                let func: extern "C" fn() = mem::transmute(self.glBindFragDataLocationIndexed);
+                (func)(
                     program,
                     color_number,
                     index,
@@ -5457,7 +5664,10 @@ mod gl {
 
             let c_string = encode_ascii(name);
 
-            unsafe { self.ffi_gl_.glGetFragDataIndex(program, c_string.as_ptr()) }
+            unsafe {
+                let func: extern "C" fn() = mem::transmute(self.glGetFragDataIndex);
+                (func)(program, c_string.as_ptr())
+            }
         }
 
         // GL_KHR_debug
@@ -5470,8 +5680,7 @@ mod gl {
 
             let mut max_message_len = 0;
             unsafe {
-                self.ffi_gl_
-                    .GetIntegerv(ffi::MAX_DEBUG_MESSAGE_LENGTH, &mut max_message_len)
+                self.get_integer_v(ffi::MAX_DEBUG_MESSAGE_LENGTH, &mut max_message_len)
             }
 
             let mut output = Vec::new();
@@ -5486,7 +5695,8 @@ mod gl {
 
             loop {
                 let count = unsafe {
-                    self.ffi_gl_.glGetDebugMessageLog(
+                    let func: extern "C" fn() = mem::transmute(self.glGetDebugMessageLog);
+                    (func)(
                         CAPACITY as _,
                         msg_data.len() as _,
                         sources.as_mut_ptr(),
@@ -5532,7 +5742,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBlendBarrierKHR();
+                let func: extern "C" fn() = mem::transmute(self.glBlendBarrierKHR);
+                (func)();
             }
         }
 
@@ -5612,7 +5823,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glBufferStorage(target, size, data, flags);
+                let func: extern "C" fn() = mem::transmute(self.glBufferStorage);
+                (func)(target, size, data, flags);
             }
         }
 
@@ -5624,7 +5836,8 @@ mod gl {
             }
 
             unsafe {
-                self.ffi_gl_.glFlushMappedBufferRange(target, offset, length);
+                let func: extern "C" fn() = mem::transmute(self.glFlushMappedBufferRange);
+                (func)(target, offset, length);
             }
         }
 
