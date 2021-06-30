@@ -9,9 +9,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "compiler_builtins"
-version = "0.1.46"
-source = "git+https://github.com/rust-lang/compiler-builtins#f26cf7299e6477ff97a523f812d35d511e3faeed"
+name = "gl-context-loader"
+version = "0.1.0"
 
 [[package]]
 name = "gl_generator"
@@ -79,7 +78,7 @@ checksum = "712e227841d057c1ee1cd2fb22fa7e5a5461ae8e48fa2ca79ec42cfc1931183f"
 name = "windowstest"
 version = "0.1.0"
 dependencies = [
- "compiler_builtins",
+ "gl-context-loader",
  "gleam",
  "libc_alloc",
  "winapi",
